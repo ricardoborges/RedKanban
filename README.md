@@ -2,6 +2,10 @@
 
 **RedKanban** is a modern Kanban board and agile management application integrated in real-time with **Redmine**. Developed with a focus on high performance and a premium visual experience, it allows you to plan sprints, manage the backlog, move tasks, and log progress directly to the Redmine APIs.
 
+> [!TIP]
+> **Live Demo:** You can test the application live without setting up anything locally! Access the web version here:
+> 🔗 **[https://ricardoborges.github.io/RedKanban/](https://ricardoborges.github.io/RedKanban/)**
+
 ---
 
 ## 🎨 Visual Demo & Interface
