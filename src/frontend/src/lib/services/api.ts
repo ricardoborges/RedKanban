@@ -66,7 +66,7 @@ export interface IssueDetails {
   journals: Journal[];
 }
 
-const BACKEND_BASE_URL = 'http://localhost:5000/api/kanban';
+const BACKEND_BASE_URL = import.meta.env.VITE_BACKEND_BASE_URL || 'http://localhost:5000/api/kanban';
 
 export function getStoredConfig(): RedmineConfig {
   if (typeof window === 'undefined') {
