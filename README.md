@@ -16,6 +16,8 @@ The project features a modern and responsive interface, with full **Dark Mode** 
 *   **Sprint & Backlog Management:** Side backlog panel for planning the scope of active and future sprints.
 *   **Smart Styling:** Visual options to highlight cards (e.g., painting cards whose tasks are assigned to you).
 
+![Kanban Board Demo](./assets/kanban_board_demo.png)
+
 ---
 
 ## 🌟 Key Features
