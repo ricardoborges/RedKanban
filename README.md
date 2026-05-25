@@ -89,7 +89,7 @@ docker-compose up --build -d
 
 Once fully initialized, the following ports and services will be available:
 
-*   **RedKanban (Frontend):** [http://localhost:5173](http://localhost:5173)
+*   **RedKanban (Frontend):** [http://localhost:5678](http://localhost:5678)
 *   **RedKanban API (Backend):** [http://localhost:5000](http://localhost:5000)
     *   *OpenAPI Docs:* [http://localhost:5000/openapi/v1.json](http://localhost:5000/openapi/v1.json)
 *   **Local Redmine:** [http://localhost:8300](http://localhost:8300)
