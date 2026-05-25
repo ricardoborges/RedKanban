@@ -4,9 +4,7 @@
     fetchKanbanData,
     fetchUsers,
     fetchCurrentUser,
-    createIssue,
     updateIssueStatus,
-    moveIssueToSprint,
     type Issue,
     type Status,
     type User as RedmineUser,
@@ -15,6 +13,7 @@
   import { i18n } from '../services/i18n.svelte';
   import KanbanCard from './KanbanCard.svelte';
   import IssueModal from './IssueModal.svelte';
+  import CreateIssueModal from './CreateIssueModal.svelte';
   import BacklogView from './BacklogView.svelte';
   import SprintModal from './SprintModal.svelte';
   import SprintDashboard from './SprintDashboard.svelte';
@@ -90,11 +89,7 @@
 
   // Criar nova tarefa
   let showCreateModal = $state(false);
-  let createSubject = $state('');
-  let createDescription = $state('');
   let createStatusId = $state<number>(0);
-  let createAssignedToId = $state<number | null>(null);
-  let creatingIssue = $state(false);
 
   // Estado para drag and drop
   let dragOverColumnId = $state<number | null>(null);
@@ -190,44 +185,7 @@
     return [];
   }
 
-  // Criação de nova tarefa
-  async function handleCreateIssue() {
-    if (!createSubject.trim()) return;
-    creatingIssue = true;
-    errorMsg = '';
-    try {
-      const newIssue = await createIssue(
-        createSubject.trim(),
-        createDescription.trim(),
-        createStatusId,
-        createAssignedToId
-      );
 
-      // Se houver uma sprint ativa, movemos a nova tarefa para ela automaticamente!
-      if (activeSprint) {
-        try {
-          await moveIssueToSprint(newIssue.id, activeSprint.id);
-          newIssue.sprintId = activeSprint.id;
-          newIssue.sprintName = activeSprint.name;
-        } catch (sprintErr) {
-          console.warn('Erro ao associar nova tarefa à sprint ativa:', sprintErr);
-        }
-      }
-
-      issues = [...issues, newIssue];
-      showCreateModal = false;
-      createSubject = '';
-      createDescription = '';
-      createAssignedToId = null;
-
-      // Recarrega dados para atualizar totais de pontos de história e metadados
-      loadData();
-    } catch (err: any) {
-      errorMsg = err.message || 'Error creating task on Redmine.';
-    } finally {
-      creatingIssue = false;
-    }
-  }
 
   // Helpers de controle de modais de sprint no quadro
   function openEditSprint(sprint: Sprint) {
@@ -585,101 +543,18 @@
 
   <!-- Create Issue Modal -->
   {#if showCreateModal}
-    <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/80 backdrop-blur-sm">
-      <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xl w-full max-w-lg flex flex-col overflow-hidden transition-colors duration-200">
-        <div class="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 px-6 py-4">
-          <h2 class="text-lg font-semibold text-zinc-800 dark:text-zinc-100 flex items-center gap-2">
-            <Plus class="w-4.5 h-4.5 text-indigo-500 dark:text-indigo-400" />
-            <span>{i18n.t('newTask')}</span>
-          </h2>
-          <button onclick={() => (showCreateModal = false)} class="text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 p-1 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all cursor-pointer">
-            <X class="w-5 h-5" />
-          </button>
-        </div>
-
-        <form onsubmit={(e) => { e.preventDefault(); handleCreateIssue(); }} class="p-6 space-y-4">
-          <div>
-            <label for="new-subject" class="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1.5">{i18n.currentLanguage === 'pt-br' ? 'Título / Assunto' : i18n.currentLanguage === 'es' ? 'Título / Asunto' : 'Title / Subject'}</label>
-            <input
-              id="new-subject"
-              type="text"
-              bind:value={createSubject}
-              placeholder={i18n.currentLanguage === 'pt-br' ? 'Digite o título da tarefa...' : i18n.currentLanguage === 'es' ? 'Escriba el título de la tarea...' : 'Enter task title...'}
-              class="w-full bg-white dark:bg-zinc-950/50 border border-zinc-200 dark:border-zinc-800 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-zinc-800 dark:text-zinc-200 focus:outline-none transition-all shadow-inner"
-              required
-              disabled={creatingIssue}
-            />
-          </div>
-
-          <div>
-            <label for="new-desc" class="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1.5">{i18n.t('description')}</label>
-            <textarea
-              id="new-desc"
-              rows="3"
-              bind:value={createDescription}
-              placeholder={i18n.currentLanguage === 'pt-br' ? 'Digite a descrição detalhada da tarefa...' : i18n.currentLanguage === 'es' ? 'Escriba la descripción detallada de la tarea...' : 'Enter detailed description...'}
-              class="w-full bg-white dark:bg-zinc-950/50 border border-zinc-200 dark:border-zinc-800 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-zinc-800 dark:text-zinc-200 focus:outline-none transition-all resize-none shadow-inner"
-              disabled={creatingIssue}
-            ></textarea>
-          </div>
-
-          <div class="grid grid-cols-2 gap-4">
-            <div>
-              <label for="new-status" class="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1.5">{i18n.currentLanguage === 'pt-br' ? 'Coluna / Status' : i18n.currentLanguage === 'es' ? 'Columna / Estado' : 'Column / Status'}</label>
-              <select
-                id="new-status"
-                bind:value={createStatusId}
-                class="w-full bg-white dark:bg-zinc-950/50 border border-zinc-200 dark:border-zinc-800 focus:border-indigo-500 rounded-xl px-3 py-2.5 text-sm text-zinc-800 dark:text-zinc-200 focus:outline-none transition-all shadow-sm"
-                disabled={creatingIssue}
-              >
-                {#each statuses as s}
-                  <option value={s.id} class="bg-white text-zinc-800 dark:bg-zinc-900 dark:text-zinc-200">{s.name}</option>
-                {/each}
-              </select>
-            </div>
-
-            <div>
-              <label for="new-assignee" class="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1.5">{i18n.t('assignee')}</label>
-              <select
-                id="new-assignee"
-                bind:value={createAssignedToId}
-                class="w-full bg-white dark:bg-zinc-950/50 border border-zinc-200 dark:border-zinc-800 focus:border-indigo-500 rounded-xl px-3 py-2.5 text-sm text-zinc-800 dark:text-zinc-200 focus:outline-none transition-all shadow-sm"
-                disabled={creatingIssue || loadingUsers}
-              >
-                <option value={null} class="bg-white text-zinc-400 dark:bg-zinc-900 dark:text-zinc-500 italic">{i18n.t('unassigned')}</option>
-                {#each users as u}
-                  <option value={u.id} class="bg-white text-zinc-800 dark:bg-zinc-900 dark:text-zinc-200">{u.name}</option>
-                {/each}
-              </select>
-            </div>
-          </div>
-
-          <div class="pt-4 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-end gap-3">
-            <button
-              type="button"
-              onclick={() => (showCreateModal = false)}
-              class="px-4 py-2.5 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300 font-medium rounded-xl text-xs transition-all cursor-pointer border border-zinc-200 dark:border-zinc-800/80 shadow-sm"
-              disabled={creatingIssue}
-            >
-              {i18n.t('cancel')}
-            </button>
-            <button
-              type="submit"
-              class="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-xl text-xs transition-all cursor-pointer flex items-center gap-1.5 shadow-md shadow-indigo-600/10"
-              disabled={creatingIssue || !createSubject.trim()}
-            >
-              {#if creatingIssue}
-                <Loader2 class="w-3.5 h-3.5 animate-spin" />
-                <span>{i18n.t('saving')}</span>
-              {:else}
-                <Plus class="w-3.5 h-3.5" />
-                <span>{i18n.t('newTask')}</span>
-              {/if}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+    <CreateIssueModal
+      {statuses}
+      {users}
+      defaultStatusId={createStatusId}
+      sprintId={activeSprint ? activeSprint.id : null}
+      onclose={() => (showCreateModal = false)}
+      onsuccess={(newIssue) => {
+        issues = [...issues, newIssue];
+        showCreateModal = false;
+        loadData();
+      }}
+    />
   {/if}
 
   <!-- Sprint Modal -->

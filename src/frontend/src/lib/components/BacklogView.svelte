@@ -9,6 +9,7 @@
   } from '../services/api';
   import { i18n } from '../services/i18n.svelte';
   import SprintModal from './SprintModal.svelte';
+  import CreateIssueModal from './CreateIssueModal.svelte';
   import {
     Calendar,
     ChevronDown,
@@ -53,6 +54,7 @@
 
   // Modal control states
   let showSprintModal = $state(false);
+  let showCreateBacklogModal = $state(false);
   let sprintModalMode = $state<'create' | 'edit' | 'start' | 'complete'>('create');
   let sprintModalTarget = $state<Sprint | null>(null);
 
@@ -264,6 +266,15 @@
                 {filteredBacklogIssues.length}
               </span>
             </div>
+            {#if !backlogCollapsed}
+              <button
+                onclick={() => (showCreateBacklogModal = true)}
+                class="text-zinc-400 hover:text-indigo-600 hover:bg-zinc-200/50 dark:text-zinc-500 dark:hover:text-indigo-400 dark:hover:bg-zinc-800/80 p-1 rounded-lg transition-all cursor-pointer"
+                title={i18n.currentLanguage === 'pt-br' ? 'Criar tarefa no Backlog' : i18n.currentLanguage === 'es' ? 'Crear tarea en el Backlog' : 'Create task in Backlog'}
+              >
+                <Plus class="w-4 h-4" />
+              </button>
+            {/if}
           </div>
 
           {#if !backlogCollapsed}
@@ -664,6 +675,22 @@
       allSprints={sprints}
       onclose={() => (showSprintModal = false)}
       onsuccess={handleModalSuccess}
+    />
+  {/if}
+
+  <!-- Create Issue Modal (for Backlog) -->
+  {#if showCreateBacklogModal}
+    <CreateIssueModal
+      {statuses}
+      {users}
+      defaultStatusId={statuses[0]?.id}
+      sprintId={null}
+      onclose={() => (showCreateBacklogModal = false)}
+      onsuccess={(newIssue) => {
+        issues = [...issues, newIssue];
+        showCreateBacklogModal = false;
+        onDataChanged();
+      }}
     />
   {/if}
 </div>
