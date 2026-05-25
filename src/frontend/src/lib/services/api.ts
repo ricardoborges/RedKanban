@@ -66,7 +66,20 @@ export interface IssueDetails {
   journals: Journal[];
 }
 
-const BACKEND_BASE_URL = import.meta.env.VITE_BACKEND_BASE_URL || 'http://localhost:5000/api/kanban';
+let BACKEND_BASE_URL = import.meta.env.VITE_BACKEND_BASE_URL;
+
+if (!BACKEND_BASE_URL) {
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
+    if (hostname.endsWith('.github.io')) {
+      BACKEND_BASE_URL = 'http://localhost:5000/api/kanban';
+    } else {
+      BACKEND_BASE_URL = '/api/kanban';
+    }
+  } else {
+    BACKEND_BASE_URL = 'http://localhost:5000/api/kanban';
+  }
+}
 
 export function getStoredConfig(): RedmineConfig {
   if (typeof window === 'undefined') {
