@@ -630,7 +630,6 @@ namespace RedKanban.Backend.Controllers
         }
 
         // Helper para atualizar ou limpar fixed_version_id com compatibilidade para Redmine 3.3.2
-        // Além disso, sincroniza o campo customizado "Sprint" (caso exista na issue no Redmine) com o nome da Versão/Sprint.
         private void UpdateIssueFixedVersion(int issueId, int? sprintId)
         {
             var url = _clientProvider.RedmineUrl;
@@ -641,44 +640,7 @@ namespace RedKanban.Backend.Controllers
                 throw new InvalidOperationException("A URL ou a API Key do Redmine não foi fornecida.");
             }
 
-            var manager = _clientProvider.GetManager();
-
-            // 1. Obter o nome da sprint (versão) no Redmine se sprintId não for nulo
-            string sprintName = "";
-            if (sprintId.HasValue)
-            {
-                try
-                {
-                    var version = manager.GetObject<Redmine.Net.Api.Types.Version>(sprintId.Value.ToString(), new NameValueCollection());
-                    sprintName = version?.Name ?? "";
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Erro ao carregar versão {sprintId} no Redmine: {ex.Message}");
-                }
-            }
-
-            // 2. Buscar o ID do campo customizado "Sprint" na issue
-            int? sprintCustomFieldId = null;
-            try
-            {
-                var issue = manager.GetObject<Issue>(issueId.ToString(), new NameValueCollection());
-                if (issue?.CustomFields != null)
-                {
-                    var cf = issue.CustomFields.FirstOrDefault(c => 
-                        c.Name.Equals("Sprint", StringComparison.OrdinalIgnoreCase));
-                    if (cf != null)
-                    {
-                        sprintCustomFieldId = cf.Id;
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Erro ao carregar campos customizados da tarefa {issueId} para sincronização: {ex.Message}");
-            }
-
-            // 3. Montar e enviar a requisição HTTP PUT de compatibilidade
+            // Montar e enviar a requisição HTTP PUT de compatibilidade
             using var client = new System.Net.Http.HttpClient();
             client.DefaultRequestHeaders.Add("X-Redmine-API-Key", apiKey);
 
@@ -687,28 +649,7 @@ namespace RedKanban.Backend.Controllers
             // Se sprintId for nulo, passamos "" (string vazia) para limpar o campo no Redmine 3.3.2
             var fixedVersionValue = sprintId.HasValue ? sprintId.Value.ToString() : "\"\"";
             
-            string jsonPayload;
-            if (sprintCustomFieldId.HasValue)
-            {
-                var escapedSprintName = System.Text.Json.JsonSerializer.Serialize(sprintName);
-                // Se o campo customizado "Sprint" existir, atualizamos tanto fixed_version_id quanto o campo customizado
-                jsonPayload = $@"{{
-                    ""issue"": {{
-                        ""fixed_version_id"": {fixedVersionValue},
-                        ""custom_fields"": [
-                            {{
-                                ""id"": {sprintCustomFieldId.Value},
-                                ""value"": {escapedSprintName}
-                            }}
-                        ]
-                    }}
-                }}";
-            }
-            else
-            {
-                // Se o campo customizado "Sprint" não existir, atualizamos apenas fixed_version_id
-                jsonPayload = $"{{\"issue\": {{\"fixed_version_id\": {fixedVersionValue}}}}}";
-            }
+            var jsonPayload = $"{{\"issue\": {{\"fixed_version_id\": {fixedVersionValue}}}}}";
 
             var content = new System.Net.Http.StringContent(jsonPayload, System.Text.Encoding.UTF8, "application/json");
 
