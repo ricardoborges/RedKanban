@@ -24,7 +24,18 @@ namespace RedKanban.Backend.Services
         private HttpContext HttpContext => _httpContextAccessor.HttpContext 
             ?? throw new InvalidOperationException("HTTP context is not available.");
 
-        public string RedmineUrl => HttpContext.Request.Headers["X-Redmine-URL"].ToString();
+        public string RedmineUrl
+        {
+            get
+            {
+                var envUrl = Environment.GetEnvironmentVariable("REDMINE_URL");
+                if (!string.IsNullOrWhiteSpace(envUrl))
+                {
+                    return envUrl;
+                }
+                return HttpContext.Request.Headers["X-Redmine-URL"].ToString();
+            }
+        }
         public string ApiKey => HttpContext.Request.Headers["X-Redmine-API-Key"].ToString();
         public string ProjectIdentifier => HttpContext.Request.Headers["X-Redmine-Project-Identifier"].ToString();
 
@@ -34,7 +45,7 @@ namespace RedKanban.Backend.Services
             var key = ApiKey;
 
             if (string.IsNullOrWhiteSpace(url))
-                throw new InvalidOperationException("A URL do Redmine não foi fornecida nos headers (X-Redmine-URL).");
+                throw new InvalidOperationException("A URL do Redmine não foi configurada (variável de ambiente REDMINE_URL ou header X-Redmine-URL).");
             if (string.IsNullOrWhiteSpace(key))
                 throw new InvalidOperationException("A API Key do Redmine não foi fornecida nos headers (X-Redmine-API-Key).");
 

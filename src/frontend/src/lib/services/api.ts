@@ -338,3 +338,13 @@ export async function completeSprint(id: number, moveIncompleteToSprintId: numbe
     throw new Error(errorText || 'Erro ao concluir Sprint.');
   }
 }
+
+export async function fetchRedmineUrl(): Promise<string> {
+  const response = await fetch(`${BACKEND_BASE_URL}/redmine-url`);
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(errorText || 'Erro ao obter a URL do Redmine do servidor.');
+  }
+  const data = await response.json();
+  return data.redmineUrl || '';
+}

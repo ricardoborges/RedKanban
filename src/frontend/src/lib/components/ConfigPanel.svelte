@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { getStoredConfig, saveConfig, validateConfig, fetchProjects, extractProjectIdentifier, type Project } from '../services/api';
+  import { getStoredConfig, saveConfig, validateConfig, fetchProjects, extractProjectIdentifier, fetchRedmineUrl, type Project } from '../services/api';
   import { i18n } from '../services/i18n.svelte';
   import { Settings, CheckCircle2, AlertCircle, Loader2 } from '@lucide/svelte';
 
@@ -19,8 +19,18 @@
   let projectError = $state('');
 
   onMount(async () => {
+    try {
+      const fetchedUrl = await fetchRedmineUrl();
+      if (fetchedUrl) {
+        redmineUrl = fetchedUrl;
+      }
+    } catch (err) {
+      console.warn('Erro ao obter a URL do Redmine do backend:', err);
+    }
     const config = getStoredConfig();
-    redmineUrl = config.redmineUrl;
+    if (!redmineUrl) {
+      redmineUrl = config.redmineUrl;
+    }
     apiKey = config.apiKey;
 
     if (redmineUrl && apiKey) {
@@ -117,8 +127,9 @@
         type="url"
         bind:value={redmineUrl}
         placeholder="http://localhost:3000"
-        class="w-full bg-white dark:bg-zinc-950/50 border border-zinc-200 dark:border-zinc-800 focus:border-indigo-500 rounded-xl px-4 py-3 text-sm text-zinc-800 dark:text-zinc-200 focus:outline-none transition-all shadow-inner"
-        required
+        class="w-full bg-zinc-100 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-sm text-zinc-500 dark:text-zinc-400 focus:outline-none transition-all cursor-not-allowed"
+        readonly
+        disabled
       />
     </div>
 

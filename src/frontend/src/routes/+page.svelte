@@ -4,7 +4,7 @@
   import StatusConfigPanel from '$lib/components/StatusConfigPanel.svelte';
   import CardStyleConfigPanel from '$lib/components/CardStyleConfigPanel.svelte';
   import KanbanBoard from '$lib/components/KanbanBoard.svelte';
-  import { getStoredConfig, validateConfig, fetchCurrentUser, type User as RedmineUser } from '$lib/services/api';
+  import { getStoredConfig, validateConfig, fetchCurrentUser, fetchRedmineUrl, type User as RedmineUser } from '$lib/services/api';
   import { i18n } from '$lib/services/i18n.svelte';
   import { Kanban, ShieldAlert, Sparkles, Sun, Moon } from '@lucide/svelte';
 
@@ -32,6 +32,15 @@
 
   onMount(async () => {
     theme = localStorage.getItem('theme') || 'light';
+    try {
+      const fetchedUrl = await fetchRedmineUrl();
+      if (fetchedUrl) {
+        localStorage.setItem('redmine_url', fetchedUrl);
+        redmineUrl = fetchedUrl;
+      }
+    } catch (err) {
+      console.warn('Erro ao obter a URL do Redmine do backend:', err);
+    }
     await checkInitialConfig();
   });
 

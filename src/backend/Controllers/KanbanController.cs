@@ -521,6 +521,13 @@ namespace RedKanban.Backend.Controllers
             }
         }
 
+        [HttpGet("redmine-url")]
+        public ActionResult<object> GetRedmineUrl()
+        {
+            var url = Environment.GetEnvironmentVariable("REDMINE_URL") ?? string.Empty;
+            return Ok(new { redmineUrl = url });
+        }
+
         [HttpGet("users")]
         public ActionResult<List<UserDto>> GetProjectUsers()
         {

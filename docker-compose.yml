@@ -10,6 +10,7 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://+:8080
+      - REDMINE_URL=${REDMINE_URL}
     restart: unless-stopped
 
   frontend:
@@ -21,6 +22,7 @@ services:
       - "5678:5173"
     environment:
       - BACKEND_URL=http://backend:8080
+      - REDMINE_URL=${REDMINE_URL}
     depends_on:
       - backend
     restart: unless-stopped
