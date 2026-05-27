@@ -6,7 +6,7 @@
   import KanbanBoard from '$lib/components/KanbanBoard.svelte';
   import { getStoredConfig, validateConfig, fetchCurrentUser, fetchRedmineUrl, fetchProjects, extractProjectIdentifier, saveConfig, detectRedmineSession, type User as RedmineUser, type Project } from '$lib/services/api';
   import { i18n } from '$lib/services/i18n.svelte';
-  import { Kanban, ShieldAlert, Sparkles, Sun, Moon, RefreshCw, Settings } from '@lucide/svelte';
+  import { Kanban, ShieldAlert, Sparkles, Sun, Moon, RefreshCw, Settings, ArrowLeft } from '@lucide/svelte';
 
   let configured = $state(false);
   let hasColumnsConfigured = $state(false);
@@ -361,9 +361,10 @@
       {#if configured && hasColumnsConfigured && hasCardStyleConfigured && showSettings}
         <button
           onclick={closeSettings}
-          class="px-4 py-2 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 text-xs font-semibold rounded-xl transition-all cursor-pointer border border-zinc-200 dark:border-zinc-800/80 shadow-sm"
+          class="px-4 py-2 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 text-xs font-bold rounded-xl transition-all cursor-pointer border border-zinc-200 dark:border-zinc-800/80 shadow-sm flex items-center gap-1.5"
         >
-          {i18n.t('backToBoard')}
+          <ArrowLeft class="w-3.5 h-3.5" />
+          <span>{i18n.t('backToBoard')}</span>
         </button>
       {/if}
     </div>
