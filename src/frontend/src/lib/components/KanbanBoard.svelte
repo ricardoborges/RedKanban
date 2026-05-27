@@ -35,11 +35,18 @@
   } from '@lucide/svelte';
 
   // Svelte 5 props
-  let { redmineUrl, projectName = 'Scrum Kanban', onOpenSettings } = $props<{
+  let {
+    redmineUrl,
+    projectName = 'Scrum Kanban',
+    onOpenSettings,
+    loading = $bindable(true)
+  } = $props<{
     redmineUrl: string;
     projectName?: string;
     onOpenSettings: () => void;
+    loading?: boolean;
   }>();
+
 
   let statuses = $state<Status[]>([]);
   let issues = $state<Issue[]>([]);
@@ -82,7 +89,7 @@
     };
   });
 
-  let loading = $state(true);
+
   let loadingUsers = $state(false);
   let errorMsg = $state('');
   let activeIssueId = $state<number | null>(null);
@@ -117,7 +124,7 @@
     };
   });
 
-  async function loadData() {
+  export async function loadData() {
     loading = true;
     errorMsg = '';
     try {
@@ -319,24 +326,7 @@
       </div>
     </div>
 
-    <div class="flex items-center gap-2.5">
-      <button
-        onclick={loadData}
-        class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 font-medium px-4 py-2 text-xs rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-sm hover:shadow"
-        disabled={loading}
-      >
-        <RefreshCw class="w-3.5 h-3.5 {loading ? 'animate-spin' : ''}" />
-        <span>{i18n.currentLanguage === 'pt-br' ? 'Atualizar' : i18n.currentLanguage === 'es' ? 'Actualizar' : 'Refresh'}</span>
-      </button>
 
-      <button
-        onclick={onOpenSettings}
-        class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 font-medium px-4 py-2 text-xs rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-sm hover:shadow"
-      >
-        <Settings class="w-3.5 h-3.5" />
-        <span>{i18n.t('openSettings')}</span>
-      </button>
-    </div>
   </div>
 
   <!-- Tab Navigation -->

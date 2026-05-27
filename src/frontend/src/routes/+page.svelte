@@ -6,7 +6,7 @@
   import KanbanBoard from '$lib/components/KanbanBoard.svelte';
   import { getStoredConfig, validateConfig, fetchCurrentUser, fetchRedmineUrl, fetchProjects, extractProjectIdentifier, saveConfig, detectRedmineSession, type User as RedmineUser, type Project } from '$lib/services/api';
   import { i18n } from '$lib/services/i18n.svelte';
-  import { Kanban, ShieldAlert, Sparkles, Sun, Moon } from '@lucide/svelte';
+  import { Kanban, ShieldAlert, Sparkles, Sun, Moon, RefreshCw, Settings } from '@lucide/svelte';
 
   let configured = $state(false);
   let hasColumnsConfigured = $state(false);
@@ -21,6 +21,8 @@
   let projects = $state<Project[]>([]);
   let selectedProjectId = $state<number | null>(null);
   let loadingProjects = $state(false);
+  let boardRef = $state<any>(null);
+  let boardLoading = $state(true);
 
   let userInitials = $derived(
     currentUser && currentUser.name
@@ -301,6 +303,35 @@
         </div>
       {/if}
 
+      {#if configured && hasColumnsConfigured && hasCardStyleConfigured && !showSettings}
+        <!-- Refresh Button -->
+        <button
+          onclick={() => boardRef?.loadData()}
+          class="p-2 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-900/50 dark:hover:bg-zinc-800 border border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 rounded-xl transition-all cursor-pointer shadow-sm hover:shadow flex items-center gap-1.5"
+          disabled={boardLoading}
+          title={i18n.currentLanguage === 'pt-br' ? 'Atualizar' : i18n.currentLanguage === 'es' ? 'Actualizar' : 'Refresh'}
+          aria-label={i18n.currentLanguage === 'pt-br' ? 'Atualizar' : i18n.currentLanguage === 'es' ? 'Actualizar' : 'Refresh'}
+        >
+          <RefreshCw class="w-4 h-4 {boardLoading ? 'animate-spin' : ''}" />
+          <span class="text-xs font-semibold hidden md:inline">
+            {i18n.currentLanguage === 'pt-br' ? 'Atualizar' : i18n.currentLanguage === 'es' ? 'Actualizar' : 'Refresh'}
+          </span>
+        </button>
+
+        <!-- Settings Button -->
+        <button
+          onclick={openSettings}
+          class="p-2 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-900/50 dark:hover:bg-zinc-800 border border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 rounded-xl transition-all cursor-pointer shadow-sm hover:shadow flex items-center gap-1.5"
+          title={i18n.t('openSettings')}
+          aria-label={i18n.t('openSettings')}
+        >
+          <Settings class="w-4 h-4" />
+          <span class="text-xs font-semibold hidden md:inline">
+            {i18n.t('openSettings')}
+          </span>
+        </button>
+      {/if}
+
       <!-- Language Selector -->
       <select
         value={i18n.currentLanguage}
@@ -387,7 +418,7 @@
       </div>
     {:else if configured && hasColumnsConfigured && hasCardStyleConfigured}
       <div class="flex-1">
-        <KanbanBoard {redmineUrl} {projectName} onOpenSettings={openSettings} />
+        <KanbanBoard bind:this={boardRef} bind:loading={boardLoading} {redmineUrl} {projectName} onOpenSettings={openSettings} />
       </div>
     {:else}
       <!-- Fallback when config error and no settings shown -->
