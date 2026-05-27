@@ -19,7 +19,7 @@ services:
       dockerfile: Dockerfile
     container_name: redkanban-frontend
     ports:
-      - "5678:5173"
+      - "5678:80"
     environment:
       - BACKEND_URL=http://backend:8080
       - REDMINE_URL=${REDMINE_URL}
