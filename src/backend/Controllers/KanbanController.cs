@@ -628,7 +628,7 @@ namespace RedKanban.Backend.Controllers
                 
                 using var stream = file.OpenReadStream();
                 using var content = new System.Net.Http.StreamContent(stream);
-                content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(file.ContentType ?? "application/octet-stream");
+                content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
 
                 var response = await client.PostAsync(targetUrl, content);
 
