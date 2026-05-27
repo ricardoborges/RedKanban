@@ -528,6 +528,74 @@ namespace RedKanban.Backend.Controllers
             return Ok(new { redmineUrl = url });
         }
 
+        [HttpPost("login")]
+        public async System.Threading.Tasks.Task<ActionResult<object>> Login([FromBody] LoginRequest request)
+        {
+            try
+            {
+                var url = request.RedmineUrl;
+                if (string.IsNullOrWhiteSpace(url))
+                {
+                    url = _clientProvider.RedmineUrl;
+                }
+
+                if (string.IsNullOrWhiteSpace(url))
+                {
+                    return BadRequest("A URL do Redmine não foi informada e nem configurada no servidor.");
+                }
+
+                if (string.IsNullOrWhiteSpace(request.Username) || string.IsNullOrWhiteSpace(request.Password))
+                {
+                    return BadRequest("Usuário e senha são obrigatórios.");
+                }
+
+                // Traduz para o container docker se necessário
+                bool isDocker = Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER") == "true";
+                if (isDocker && (url.Contains("localhost") || url.Contains("127.0.0.1")))
+                {
+                    url = System.Text.RegularExpressions.Regex.Replace(url, @"(localhost|127\.0\.0\.1)(:\d+)?", "redmine:3000");
+                }
+
+                // Desativa a validação do certificado SSL corporativo/interno para a chamada de backend
+                var handler = new System.Net.Http.HttpClientHandler
+                {
+                    ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true
+                };
+
+                using var client = new System.Net.Http.HttpClient(handler);
+                var targetUrl = $"{url.TrimEnd('/')}/users/current.json";
+
+                var requestMessage = new System.Net.Http.HttpRequestMessage(System.Net.Http.HttpMethod.Get, targetUrl);
+                
+                var authBytes = System.Text.Encoding.UTF8.GetBytes($"{request.Username}:{request.Password}");
+                requestMessage.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", Convert.ToBase64String(authBytes));
+
+                var response = await client.SendAsync(requestMessage);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    var content = await response.Content.ReadAsStringAsync();
+                    using var doc = System.Text.Json.JsonDocument.Parse(content);
+                    if (doc.RootElement.TryGetProperty("user", out var userEl) && userEl.TryGetProperty("api_key", out var apiKeyEl))
+                    {
+                        var apiKey = apiKeyEl.GetString();
+                        if (!string.IsNullOrWhiteSpace(apiKey))
+                        {
+                            return Ok(new { loggedIn = true, apiKey });
+                        }
+                    }
+                    return BadRequest("Login bem-sucedido, mas nenhuma API Key foi encontrada na resposta do Redmine. Verifique se o acesso à API REST está ativo nas configurações do seu usuário no Redmine.");
+                }
+
+                var errorBody = await response.Content.ReadAsStringAsync();
+                return StatusCode((int)response.StatusCode, $"Falha de autenticação no Redmine: {response.StatusCode}. Detalhes: {errorBody}");
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"Erro ao conectar ao Redmine para autenticação: {ex.Message}");
+            }
+        }
+
         [HttpGet("detect-session")]
         public async System.Threading.Tasks.Task<ActionResult<object>> DetectSession()
         {

@@ -117,4 +117,11 @@ namespace RedKanban.Backend.Models
     {
         public int? MoveIncompleteToSprintId { get; set; }
     }
+
+    public class LoginRequest
+    {
+        public string Username { get; set; } = string.Empty;
+        public string Password { get; set; } = string.Empty;
+        public string? RedmineUrl { get; set; }
+    }
 }

@@ -370,3 +370,22 @@ export async function detectRedmineSession(redmineUrl: string): Promise<string |
   }
   return null;
 }
+
+export async function loginWithCredentials(username: string, password: string, redmineUrl: string): Promise<string> {
+  const response = await fetch(`${BACKEND_BASE_URL}/login`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ username, password, redmineUrl })
+  });
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(errorText || 'Falha ao autenticar.');
+  }
+  const data = await response.json();
+  if (!data.apiKey) {
+    throw new Error('API Key não retornada pelo servidor.');
+  }
+  return data.apiKey;
+}
