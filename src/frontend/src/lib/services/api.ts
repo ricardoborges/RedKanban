@@ -351,15 +351,22 @@ export async function fetchRedmineUrl(): Promise<string> {
 
 export async function detectRedmineSession(redmineUrl: string): Promise<string | null> {
   try {
+    console.log('[detectRedmineSession] Chamando /detect-session no backend...');
     const response = await fetch(`${BACKEND_BASE_URL}/detect-session`, { credentials: 'include' });
     if (response.ok) {
       const data = await response.json();
+      console.log('[detectRedmineSession] Resposta recebida:', data);
       if (data && data.loggedIn && data.apiKey) {
+        console.log('[detectRedmineSession] Autenticação bem-sucedida! Chave obtida.');
         return data.apiKey;
+      } else {
+        console.warn('[detectRedmineSession] Sessão não detectada:', data.message);
       }
+    } else {
+      console.error('[detectRedmineSession] Erro HTTP ao conectar com o backend:', response.status);
     }
   } catch (err) {
-    console.warn('Falha ao tentar detectar a sessão do Redmine via backend:', err);
+    console.error('[detectRedmineSession] Erro na requisição de detecção:', err);
   }
   return null;
 }

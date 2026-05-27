@@ -534,8 +534,11 @@ namespace RedKanban.Backend.Controllers
             try
             {
                 var url = _clientProvider.RedmineUrl;
+                Console.WriteLine($"[DetectSession] Iniciando detecção. URL do Redmine: '{url}'");
+
                 if (string.IsNullOrWhiteSpace(url))
                 {
+                    Console.WriteLine("[DetectSession] URL do Redmine está nula ou vazia.");
                     return Ok(new { loggedIn = false, message = "A URL do Redmine não está configurada." });
                 }
 
@@ -544,38 +547,58 @@ namespace RedKanban.Backend.Controllers
                 if (isDocker && (url.Contains("localhost") || url.Contains("127.0.0.1")))
                 {
                     url = System.Text.RegularExpressions.Regex.Replace(url, @"(localhost|127\.0\.0\.1)(:\d+)?", "redmine:3000");
+                    Console.WriteLine($"[DetectSession] Traduzido endereço localhost docker para: '{url}'");
                 }
 
                 var cookieHeader = Request.Headers["Cookie"].ToString();
+                Console.WriteLine($"[DetectSession] Header Cookie recebido do navegador: '{cookieHeader}'");
+
                 if (string.IsNullOrWhiteSpace(cookieHeader))
                 {
-                    return Ok(new { loggedIn = false, message = "Nenhum cookie enviado pelo navegador." });
+                    Console.WriteLine("[DetectSession] Nenhum cookie enviado no request.");
+                    return Ok(new { loggedIn = false, message = "Nenhum cookie enviado pelo navegador no header 'Cookie'." });
                 }
 
-                using var client = new System.Net.Http.HttpClient();
-                var requestMessage = new System.Net.Http.HttpRequestMessage(System.Net.Http.HttpMethod.Get, $"{url.TrimEnd('/')}/users/current.json");
+                // Desativa a validação do certificado SSL corporativo/interno para a chamada de backend
+                var handler = new System.Net.Http.HttpClientHandler
+                {
+                    ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true
+                };
+
+                using var client = new System.Net.Http.HttpClient(handler);
+                var targetUrl = $"{url.TrimEnd('/')}/users/current.json";
+                Console.WriteLine($"[DetectSession] Fazendo chamada ao Redmine no endpoint: '{targetUrl}'");
+
+                var requestMessage = new System.Net.Http.HttpRequestMessage(System.Net.Http.HttpMethod.Get, targetUrl);
                 requestMessage.Headers.Add("Cookie", cookieHeader);
 
                 var response = await client.SendAsync(requestMessage);
+                Console.WriteLine($"[DetectSession] Resposta HTTP do Redmine: {(int)response.StatusCode} ({response.StatusCode})");
+
                 if (response.IsSuccessStatusCode)
                 {
                     var content = await response.Content.ReadAsStringAsync();
-                    // Desserializa para obter a api_key
                     using var doc = System.Text.Json.JsonDocument.Parse(content);
                     if (doc.RootElement.TryGetProperty("user", out var userEl) && userEl.TryGetProperty("api_key", out var apiKeyEl))
                     {
                         var apiKey = apiKeyEl.GetString();
                         if (!string.IsNullOrWhiteSpace(apiKey))
                         {
+                            Console.WriteLine("[DetectSession] Chave de API extraída da sessão com sucesso.");
                             return Ok(new { loggedIn = true, apiKey });
                         }
                     }
+                    Console.WriteLine("[DetectSession] Resposta do Redmine não continha o campo 'api_key'. Verifique se o acesso à API REST está ativo nas configurações do usuário.");
+                    return Ok(new { loggedIn = false, message = "Sessão identificada, mas nenhuma API Key foi encontrada na resposta do Redmine." });
                 }
 
-                return Ok(new { loggedIn = false, message = $"Redmine respondeu com status {response.StatusCode}." });
+                var errorBody = await response.Content.ReadAsStringAsync();
+                Console.WriteLine($"[DetectSession] Falha na chamada ao Redmine. Detalhes: {errorBody}");
+                return Ok(new { loggedIn = false, message = $"Redmine respondeu com status {(int)response.StatusCode} ({response.StatusCode}). Detalhes: {errorBody}" });
             }
             catch (Exception ex)
             {
+                Console.WriteLine($"[DetectSession] Exceção ocorrida: {ex.ToString()}");
                 return Ok(new { loggedIn = false, message = $"Erro ao conectar ao Redmine: {ex.Message}" });
             }
         }
