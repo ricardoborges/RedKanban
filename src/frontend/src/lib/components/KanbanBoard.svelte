@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import {
     fetchKanbanData,
     fetchUsers,
@@ -96,9 +96,15 @@
 
   let intervalId: any;
 
-  onMount(() => {
-    loadData();
+  $effect(() => {
+    projectName;
+    redmineUrl;
+    untrack(() => {
+      loadData();
+    });
+  });
 
+  onMount(() => {
     // Atualiza os dados a cada 1 minuto (60.000 ms)
     intervalId = setInterval(() => {
       loadData();

@@ -4,7 +4,7 @@
   import StatusConfigPanel from '$lib/components/StatusConfigPanel.svelte';
   import CardStyleConfigPanel from '$lib/components/CardStyleConfigPanel.svelte';
   import KanbanBoard from '$lib/components/KanbanBoard.svelte';
-  import { getStoredConfig, validateConfig, fetchCurrentUser, fetchRedmineUrl, type User as RedmineUser } from '$lib/services/api';
+  import { getStoredConfig, validateConfig, fetchCurrentUser, fetchRedmineUrl, fetchProjects, extractProjectIdentifier, saveConfig, type User as RedmineUser, type Project } from '$lib/services/api';
   import { i18n } from '$lib/services/i18n.svelte';
   import { Kanban, ShieldAlert, Sparkles, Sun, Moon } from '@lucide/svelte';
 
@@ -18,6 +18,9 @@
   let settingsTab = $state<'connection' | 'columns' | 'cardStyle'>('connection');
   let theme = $state('light');
   let currentUser = $state<RedmineUser | null>(null);
+  let projects = $state<Project[]>([]);
+  let selectedProjectId = $state<number | null>(null);
+  let loadingProjects = $state(false);
 
   let userInitials = $derived(
     currentUser && currentUser.name
@@ -68,6 +71,50 @@
     }
   }
 
+  async function loadProjects() {
+    if (!redmineUrl) return;
+    const config = getStoredConfig();
+    if (!config.apiKey) return;
+    loadingProjects = true;
+    try {
+      const cleanUrl = redmineUrl.replace(/\/$/, "");
+      projects = await fetchProjects(cleanUrl, config.apiKey.trim());
+      if (config.projectUrl && projects.length > 0) {
+        const savedIdentifier = extractProjectIdentifier(config.projectUrl);
+        const match = projects.find(p => p.identifier === savedIdentifier);
+        if (match) {
+          selectedProjectId = match.id;
+        }
+      }
+    } catch (err) {
+      console.warn('Erro ao carregar projetos:', err);
+    } finally {
+      loadingProjects = false;
+    }
+  }
+
+  function handleProjectChange(e: Event) {
+    const select = e.currentTarget as HTMLSelectElement;
+    const val = parseInt(select.value, 10);
+    if (!val) return;
+
+    const selectedProject = projects.find(p => p.id === val);
+    if (selectedProject) {
+      selectedProjectId = selectedProject.id;
+      projectName = selectedProject.name;
+      
+      const config = getStoredConfig();
+      const cleanUrl = redmineUrl.replace(/\/$/, "");
+      const projectUrl = `${cleanUrl}/projects/${selectedProject.identifier}`;
+      
+      const newConfig = {
+        ...config,
+        projectUrl: projectUrl
+      };
+      saveConfig(newConfig);
+    }
+  }
+
   async function checkInitialConfig() {
     checkingConfig = true;
     const config = getStoredConfig();
@@ -94,6 +141,7 @@
           showSettings = false;
         }
         await loadCurrentUser();
+        await loadProjects();
       } catch (err) {
         console.warn('Configuração salva é inválida:', err);
         configured = false;
@@ -122,6 +170,7 @@
     settingsTab = 'columns';
     showSettings = true;
     loadCurrentUser();
+    loadProjects();
   }
 
   function handleColumnsConfigured() {
@@ -159,13 +208,32 @@
   <!-- Navbar -->
   <header class="bg-white/60 dark:bg-zinc-900/40 backdrop-blur-md border-b border-zinc-200 dark:border-zinc-800/80 px-6 py-4 flex items-center justify-between static sm:sticky top-0 z-40 transition-colors duration-200">
     <div class="flex items-center gap-3">
-      <div class="p-2 bg-gradient-to-tr from-indigo-600 to-purple-600 rounded-xl text-white shadow-lg shadow-indigo-600/20">
+      <div class="p-2 bg-gradient-to-tr from-indigo-600 to-purple-600 rounded-xl text-white shadow-lg shadow-indigo-600/20 shrink-0">
         <Kanban class="w-5 h-5" />
       </div>
-      <div>
-        <span class="text-base font-bold bg-gradient-to-r from-indigo-600 to-purple-600 dark:from-indigo-400 dark:to-purple-400 bg-clip-text text-transparent">
+      <div class="flex items-center gap-2 min-w-0">
+        <span class="text-base font-bold bg-gradient-to-r from-indigo-600 to-purple-600 dark:from-indigo-400 dark:to-purple-400 bg-clip-text text-transparent hidden sm:inline shrink-0">
           RedKanban
         </span>
+        {#if configured}
+          <span class="text-zinc-300 dark:text-zinc-700 hidden sm:inline shrink-0">/</span>
+          {#if projects.length > 0}
+            <select
+              value={selectedProjectId}
+              onchange={handleProjectChange}
+              class="p-2 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-900/50 dark:hover:bg-zinc-800 border border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 rounded-xl transition-all cursor-pointer shadow-sm hover:shadow text-xs font-semibold focus:outline-none max-w-[150px] sm:max-w-[240px] truncate"
+              aria-label="Select Project"
+            >
+              {#each projects as project}
+                <option value={project.id}>{project.name}</option>
+              {/each}
+            </select>
+          {:else if loadingProjects}
+            <div class="flex items-center gap-1.5 text-xs text-zinc-400 dark:text-zinc-500">
+              <div class="w-3.5 h-3.5 border-2 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin"></div>
+            </div>
+          {/if}
+        {/if}
       </div>
     </div>
 
