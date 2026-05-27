@@ -262,8 +262,7 @@
       console.error(err);
       
       // Exibe toast/alerta de erro temporário
-      const prefix = i18n.currentLanguage === 'pt-br' ? 'Não foi possível mover a tarefa: ' : i18n.currentLanguage === 'es' ? 'No se pudo mover la tarea: ' : 'Could not move task: ';
-      errorMsg = `${prefix}${err.message || 'Error'}`;
+      errorMsg = err.message || 'Erro desconhecido.';
       
       // Restaura o status original
       const revertedIssues = [...issues];
@@ -279,9 +278,7 @@
 
       // Limpa mensagem de erro após 6 segundos
       setTimeout(() => {
-        if (errorMsg.includes('mover a tarefa') || errorMsg.includes('mover la tarea') || errorMsg.includes('move task')) {
-          errorMsg = '';
-        }
+        errorMsg = '';
       }, 6000);
     }
   }
@@ -360,14 +357,21 @@
     </button>
   </div>
 
-  <!-- Global Error Alert -->
+  <!-- Floating Error Toast -->
   {#if errorMsg}
-    <div class="bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-xs rounded-xl p-4 flex items-start justify-between gap-3">
+    <div class="fixed bottom-6 right-6 z-50 max-w-md bg-white dark:bg-zinc-900 border border-red-200 dark:border-red-900/40 text-zinc-800 dark:text-zinc-200 text-xs rounded-2xl p-4 shadow-2xl flex items-start justify-between gap-3 transition-all duration-300">
       <div class="flex items-start gap-2.5">
-        <AlertCircle class="w-4 h-4 shrink-0 mt-0.5" />
-        <span>{errorMsg}</span>
+        <div class="p-1.5 bg-red-50 dark:bg-red-500/10 rounded-lg text-red-600 dark:text-red-400 shrink-0">
+          <AlertCircle class="w-4.5 h-4.5" />
+        </div>
+        <div class="space-y-1">
+          <p class="font-bold text-red-600 dark:text-red-400">
+            {i18n.currentLanguage === 'pt-br' ? 'Erro na Operação' : i18n.currentLanguage === 'es' ? 'Error en la Operación' : 'Operation Error'}
+          </p>
+          <p class="text-zinc-500 dark:text-zinc-400 leading-normal">{errorMsg}</p>
+        </div>
       </div>
-      <button onclick={() => (errorMsg = '')} class="text-red-500 dark:text-red-400/70 hover:text-red-700 dark:hover:text-red-400 transition-colors">
+      <button onclick={() => (errorMsg = '')} class="text-zinc-400 hover:text-zinc-650 dark:text-zinc-500 dark:hover:text-zinc-350 transition-colors cursor-pointer shrink-0">
         <X class="w-4 h-4" />
       </button>
     </div>

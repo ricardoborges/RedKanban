@@ -807,7 +807,8 @@ namespace RedKanban.Backend.Controllers
             if (!response.IsSuccessStatusCode)
             {
                 var errorContent = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
-                throw new Exception($"Falha ao atualizar tarefa no Redmine: {response.StatusCode} - {errorContent}");
+                var friendlyError = ExtractRedmineErrorMessage(errorContent, response.StatusCode, "Falha ao atualizar tarefa no Redmine");
+                throw new Exception(friendlyError);
             }
         }
 
@@ -857,7 +858,8 @@ namespace RedKanban.Backend.Controllers
             if (!response.IsSuccessStatusCode)
             {
                 var errorContent = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
-                throw new Exception($"Falha ao atualizar a sprint no Redmine: {response.StatusCode} - {errorContent}");
+                var friendlyError = ExtractRedmineErrorMessage(errorContent, response.StatusCode, "Falha ao atualizar a sprint no Redmine");
+                throw new Exception(friendlyError);
             }
         }
 
@@ -887,7 +889,8 @@ namespace RedKanban.Backend.Controllers
             if (!response.IsSuccessStatusCode)
             {
                 var errorContent = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
-                throw new Exception($"Falha ao atualizar status da tarefa no Redmine: {response.StatusCode} - {errorContent}");
+                var friendlyError = ExtractRedmineErrorMessage(errorContent, response.StatusCode, "Falha ao atualizar status da tarefa no Redmine");
+                throw new Exception(friendlyError);
             }
         }
 
@@ -918,7 +921,8 @@ namespace RedKanban.Backend.Controllers
             if (!response.IsSuccessStatusCode)
             {
                 var errorContent = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
-                throw new Exception($"Falha ao adicionar comentário no Redmine: {response.StatusCode} - {errorContent}");
+                var friendlyError = ExtractRedmineErrorMessage(errorContent, response.StatusCode, "Falha ao adicionar comentário no Redmine");
+                throw new Exception(friendlyError);
             }
         }
 
@@ -1067,6 +1071,52 @@ namespace RedKanban.Backend.Controllers
             {
                 return BadRequest($"Erro ao concluir sprint: {ex.Message}");
             }
+        }
+
+        private static string ExtractRedmineErrorMessage(string errorContent, System.Net.HttpStatusCode statusCode, string defaultMessage)
+        {
+            if (string.IsNullOrWhiteSpace(errorContent))
+            {
+                return $"{defaultMessage}: status {(int)statusCode} ({statusCode})";
+            }
+
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(errorContent);
+                if (doc.RootElement.TryGetProperty("errors", out var errorsEl))
+                {
+                    if (errorsEl.ValueKind == System.Text.Json.JsonValueKind.Array)
+                    {
+                        var errorList = new List<string>();
+                        foreach (var err in errorsEl.EnumerateArray())
+                        {
+                            var errMsg = err.GetString();
+                            if (!string.IsNullOrWhiteSpace(errMsg))
+                            {
+                                errorList.Add(errMsg);
+                            }
+                        }
+                        if (errorList.Count > 0)
+                        {
+                            return string.Join("; ", errorList);
+                        }
+                    }
+                    else if (errorsEl.ValueKind == System.Text.Json.JsonValueKind.String)
+                    {
+                        var errMsg = errorsEl.GetString();
+                        if (!string.IsNullOrWhiteSpace(errMsg))
+                        {
+                            return errMsg;
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                // Ignora erro de parsing e retorna mensagem padrão
+            }
+
+            return $"{defaultMessage}: status {(int)statusCode} ({statusCode}) - {errorContent}";
         }
     }
 }
