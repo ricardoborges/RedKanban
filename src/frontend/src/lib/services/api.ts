@@ -350,18 +350,16 @@ export async function fetchRedmineUrl(): Promise<string> {
 }
 
 export async function detectRedmineSession(redmineUrl: string): Promise<string | null> {
-  if (!redmineUrl) return null;
-  const cleanUrl = redmineUrl.replace(/\/$/, "");
   try {
-    const response = await fetch(`${cleanUrl}/users/current.json`, { credentials: 'include' });
+    const response = await fetch(`${BACKEND_BASE_URL}/detect-session`, { credentials: 'include' });
     if (response.ok) {
       const data = await response.json();
-      if (data && data.user && data.user.api_key) {
-        return data.user.api_key;
+      if (data && data.loggedIn && data.apiKey) {
+        return data.apiKey;
       }
     }
   } catch (err) {
-    console.warn('Falha ao tentar detectar a sessão do Redmine via cookies:', err);
+    console.warn('Falha ao tentar detectar a sessão do Redmine via backend:', err);
   }
   return null;
 }

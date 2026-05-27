@@ -528,6 +528,58 @@ namespace RedKanban.Backend.Controllers
             return Ok(new { redmineUrl = url });
         }
 
+        [HttpGet("detect-session")]
+        public async System.Threading.Tasks.Task<ActionResult<object>> DetectSession()
+        {
+            try
+            {
+                var url = _clientProvider.RedmineUrl;
+                if (string.IsNullOrWhiteSpace(url))
+                {
+                    return Ok(new { loggedIn = false, message = "A URL do Redmine não está configurada." });
+                }
+
+                // Traduz para o container docker se necessário
+                bool isDocker = Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER") == "true";
+                if (isDocker && (url.Contains("localhost") || url.Contains("127.0.0.1")))
+                {
+                    url = System.Text.RegularExpressions.Regex.Replace(url, @"(localhost|127\.0\.0\.1)(:\d+)?", "redmine:3000");
+                }
+
+                var cookieHeader = Request.Headers["Cookie"].ToString();
+                if (string.IsNullOrWhiteSpace(cookieHeader))
+                {
+                    return Ok(new { loggedIn = false, message = "Nenhum cookie enviado pelo navegador." });
+                }
+
+                using var client = new System.Net.Http.HttpClient();
+                var requestMessage = new System.Net.Http.HttpRequestMessage(System.Net.Http.HttpMethod.Get, $"{url.TrimEnd('/')}/users/current.json");
+                requestMessage.Headers.Add("Cookie", cookieHeader);
+
+                var response = await client.SendAsync(requestMessage);
+                if (response.IsSuccessStatusCode)
+                {
+                    var content = await response.Content.ReadAsStringAsync();
+                    // Desserializa para obter a api_key
+                    using var doc = System.Text.Json.JsonDocument.Parse(content);
+                    if (doc.RootElement.TryGetProperty("user", out var userEl) && userEl.TryGetProperty("api_key", out var apiKeyEl))
+                    {
+                        var apiKey = apiKeyEl.GetString();
+                        if (!string.IsNullOrWhiteSpace(apiKey))
+                        {
+                            return Ok(new { loggedIn = true, apiKey });
+                        }
+                    }
+                }
+
+                return Ok(new { loggedIn = false, message = $"Redmine respondeu com status {response.StatusCode}." });
+            }
+            catch (Exception ex)
+            {
+                return Ok(new { loggedIn = false, message = $"Erro ao conectar ao Redmine: {ex.Message}" });
+            }
+        }
+
         [HttpGet("users")]
         public ActionResult<List<UserDto>> GetProjectUsers()
         {
