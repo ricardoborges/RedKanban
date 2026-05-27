@@ -4,7 +4,7 @@
   import StatusConfigPanel from '$lib/components/StatusConfigPanel.svelte';
   import CardStyleConfigPanel from '$lib/components/CardStyleConfigPanel.svelte';
   import KanbanBoard from '$lib/components/KanbanBoard.svelte';
-  import { getStoredConfig, validateConfig, fetchCurrentUser, fetchRedmineUrl, fetchProjects, extractProjectIdentifier, saveConfig, type User as RedmineUser, type Project } from '$lib/services/api';
+  import { getStoredConfig, validateConfig, fetchCurrentUser, fetchRedmineUrl, fetchProjects, extractProjectIdentifier, saveConfig, detectRedmineSession, type User as RedmineUser, type Project } from '$lib/services/api';
   import { i18n } from '$lib/services/i18n.svelte';
   import { Kanban, ShieldAlert, Sparkles, Sun, Moon } from '@lucide/svelte';
 
@@ -117,10 +117,26 @@
 
   async function checkInitialConfig() {
     checkingConfig = true;
-    const config = getStoredConfig();
+    let config = getStoredConfig();
     const columnsOrder = localStorage.getItem('kanban_status_order');
     hasColumnsConfigured = !!columnsOrder;
     hasCardStyleConfigured = !!localStorage.getItem('kanban_my_card_color');
+
+    const targetRedmineUrl = config.redmineUrl || redmineUrl;
+
+    // Tenta detectar login automático se a API key não estiver salva
+    if (!config.apiKey && targetRedmineUrl) {
+      try {
+        const detectedKey = await detectRedmineSession(targetRedmineUrl);
+        if (detectedKey) {
+          config.apiKey = detectedKey;
+          config.redmineUrl = targetRedmineUrl;
+          saveConfig(config);
+        }
+      } catch (sessErr) {
+        console.warn('Erro ao auto-detectar sessão do Redmine:', sessErr);
+      }
+    }
 
     if (config.redmineUrl && config.apiKey && config.projectUrl) {
       try {
@@ -144,6 +160,42 @@
         await loadProjects();
       } catch (err) {
         console.warn('Configuração salva é inválida:', err);
+
+        // Tenta recuperar nova API key da sessão caso a salva tenha expirado/sido alterada
+        if (targetRedmineUrl) {
+          try {
+            const detectedKey = await detectRedmineSession(targetRedmineUrl);
+            if (detectedKey && detectedKey !== config.apiKey) {
+              config.apiKey = detectedKey;
+              saveConfig(config);
+
+              // Tenta validar novamente com a nova chave detectada
+              try {
+                const project = await validateConfig();
+                projectName = project.name;
+                configured = true;
+                if (!hasColumnsConfigured) {
+                  showSettings = true;
+                  settingsTab = 'columns';
+                } else if (!hasCardStyleConfigured) {
+                  showSettings = true;
+                  settingsTab = 'cardStyle';
+                } else {
+                  showSettings = false;
+                }
+                await loadCurrentUser();
+                await loadProjects();
+                checkingConfig = false;
+                return;
+              } catch (revalErr) {
+                console.warn('Falha ao validar após atualizar API key detectada:', revalErr);
+              }
+            }
+          } catch (sessErr) {
+            console.warn('Erro ao tentar re-detectar sessão do Redmine:', sessErr);
+          }
+        }
+
         configured = false;
         showSettings = true;
         settingsTab = 'connection';

@@ -348,3 +348,20 @@ export async function fetchRedmineUrl(): Promise<string> {
   const data = await response.json();
   return data.redmineUrl || '';
 }
+
+export async function detectRedmineSession(redmineUrl: string): Promise<string | null> {
+  if (!redmineUrl) return null;
+  const cleanUrl = redmineUrl.replace(/\/$/, "");
+  try {
+    const response = await fetch(`${cleanUrl}/users/current.json`, { credentials: 'include' });
+    if (response.ok) {
+      const data = await response.json();
+      if (data && data.user && data.user.api_key) {
+        return data.user.api_key;
+      }
+    }
+  } catch (err) {
+    console.warn('Falha ao tentar detectar a sessão do Redmine via cookies:', err);
+  }
+  return null;
+}
