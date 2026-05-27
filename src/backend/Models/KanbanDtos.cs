@@ -62,12 +62,20 @@ namespace RedKanban.Backend.Models
         public List<JournalDto> Journals { get; set; } = new();
     }
 
+    public class AttachmentDto
+    {
+        public string Token { get; set; } = string.Empty;
+        public string Filename { get; set; } = string.Empty;
+        public string ContentType { get; set; } = string.Empty;
+    }
+
     public class CreateIssueRequest
     {
         public string Subject { get; set; } = string.Empty;
         public string Description { get; set; } = string.Empty;
         public int StatusId { get; set; }
         public int? AssignedToId { get; set; }
+        public List<AttachmentDto>? Attachments { get; set; }
     }
 
     public class UpdateStatusRequest
@@ -78,6 +86,7 @@ namespace RedKanban.Backend.Models
     public class AddCommentRequest
     {
         public string Notes { get; set; } = string.Empty;
+        public List<AttachmentDto>? Attachments { get; set; }
     }
 
     public class SprintDto

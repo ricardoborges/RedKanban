@@ -202,12 +202,12 @@ export async function fetchUsers(): Promise<User[]> {
   return response.json();
 }
 
-export async function createIssue(subject: string, description: string, statusId: number, assignedToId: number | null): Promise<Issue> {
+export async function createIssue(subject: string, description: string, statusId: number, assignedToId: number | null, attachments?: any[]): Promise<Issue> {
   const headers = getHeaders();
   const response = await fetch(`${BACKEND_BASE_URL}/issues`, {
     method: 'POST',
     headers,
-    body: JSON.stringify({ subject, description, statusId, assignedToId }),
+    body: JSON.stringify({ subject, description, statusId, assignedToId, attachments }),
   });
   if (!response.ok) {
     const errorText = await response.text();
@@ -259,12 +259,12 @@ export async function fetchIssueDetails(issueId: number): Promise<IssueDetails> 
   return details;
 }
 
-export async function addComment(issueId: number, notes: string): Promise<void> {
+export async function addComment(issueId: number, notes: string, attachments?: any[]): Promise<void> {
   const headers = getHeaders();
   const response = await fetch(`${BACKEND_BASE_URL}/issues/${issueId}/journals`, {
     method: 'POST',
     headers,
-    body: JSON.stringify({ notes }),
+    body: JSON.stringify({ notes, attachments }),
   });
   if (!response.ok) {
     const errorText = await response.text();
@@ -388,4 +388,26 @@ export async function loginWithCredentials(username: string, password: string, r
     throw new Error('API Key não retornada pelo servidor.');
   }
   return data.apiKey;
+}
+
+export async function uploadFile(file: File): Promise<{ token: string; filename: string; contentType: string }> {
+  const config = getStoredConfig();
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const response = await fetch(`${BACKEND_BASE_URL}/upload`, {
+    method: 'POST',
+    headers: {
+      'X-Redmine-URL': config.redmineUrl,
+      'X-Redmine-API-Key': config.apiKey,
+    },
+    body: formData
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(errorText || 'Erro ao enviar o arquivo.');
+  }
+
+  return response.json();
 }

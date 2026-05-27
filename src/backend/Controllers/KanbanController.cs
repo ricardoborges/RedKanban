@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Http;
 using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
@@ -203,7 +204,6 @@ namespace RedKanban.Backend.Controllers
                     return BadRequest("O identificador do projeto (X-Redmine-Project-Identifier) é obrigatório.");
                 }
 
-                // Obtemos o ID numérico do projeto primeiro com trackers inclusos
                 var projectParams = new NameValueCollection { { "include", "trackers" } };
                 var project = manager.GetObject<Project>(projectIdentifier, projectParams);
                 if (project == null)
@@ -211,42 +211,107 @@ namespace RedKanban.Backend.Controllers
                     return NotFound("Projeto não encontrado no Redmine.");
                 }
 
-                var newIssue = new Issue
+                var url = _clientProvider.RedmineUrl;
+                var apiKey = _clientProvider.ApiKey;
+
+                if (string.IsNullOrWhiteSpace(url) || string.IsNullOrWhiteSpace(apiKey))
                 {
-                    Subject = request.Subject,
-                    Description = request.Description,
-                    Project = IdentifiableName.Create<IdentifiableName>(project.Id),
-                    Status = IdentifiableName.Create<IssueStatus>(request.StatusId)
+                    return BadRequest("A URL ou a API Key do Redmine não foi fornecida.");
+                }
+
+                // Traduz para o container docker se necessário
+                bool isDocker = Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER") == "true";
+                if (isDocker && (url.Contains("localhost") || url.Contains("127.0.0.1")))
+                {
+                    url = System.Text.RegularExpressions.Regex.Replace(url, @"(localhost|127\.0\.0\.1)(:\d+)?", "redmine:3000");
+                }
+
+                using var client = new System.Net.Http.HttpClient();
+                client.DefaultRequestHeaders.Add("X-Redmine-API-Key", apiKey);
+
+                var endpoint = $"{url.TrimEnd('/')}/issues.json";
+
+                var trackerId = (project.Trackers != null && project.Trackers.Count > 0) 
+                    ? project.Trackers.First().Id 
+                    : 1;
+
+                var payloadObj = new
+                {
+                    issue = new
+                    {
+                        project_id = project.Id,
+                        subject = request.Subject,
+                        description = request.Description,
+                        status_id = request.StatusId,
+                        tracker_id = trackerId,
+                        assigned_to_id = request.AssignedToId,
+                        uploads = request.Attachments?.Select(a => new
+                        {
+                            token = a.Token,
+                            filename = a.Filename,
+                            content_type = a.ContentType
+                        }).ToList()
+                    }
                 };
 
-                if (project.Trackers != null && project.Trackers.Count > 0)
+                var jsonPayload = System.Text.Json.JsonSerializer.Serialize(payloadObj);
+                var content = new System.Net.Http.StringContent(jsonPayload, System.Text.Encoding.UTF8, "application/json");
+
+                var response = client.PostAsync(endpoint, content).GetAwaiter().GetResult();
+
+                if (response.IsSuccessStatusCode)
                 {
-                    newIssue.Tracker = IdentifiableName.Create<IdentifiableName>(project.Trackers.First().Id);
+                    var responseBody = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+                    using var doc = System.Text.Json.JsonDocument.Parse(responseBody);
+                    var issueEl = doc.RootElement.GetProperty("issue");
+                    
+                    var createdId = issueEl.GetProperty("id").GetInt32();
+                    var createdSubject = issueEl.GetProperty("subject").GetString() ?? string.Empty;
+                    var createdDesc = issueEl.TryGetProperty("description", out var descProp) ? (descProp.GetString() ?? string.Empty) : string.Empty;
+                    
+                    var statusEl = issueEl.GetProperty("status");
+                    var statusId = statusEl.GetProperty("id").GetInt32();
+                    var statusName = statusEl.GetProperty("name").GetString() ?? string.Empty;
+                    
+                    int? assignedToId = null;
+                    string assignedToName = "Sem atribuição";
+                    if (issueEl.TryGetProperty("assigned_to", out var assignedToEl) && assignedToEl.ValueKind != System.Text.Json.JsonValueKind.Null)
+                    {
+                        assignedToId = assignedToEl.GetProperty("id").GetInt32();
+                        assignedToName = assignedToEl.GetProperty("name").GetString() ?? "Sem atribuição";
+                    }
+
+                    DateTime? createdOn = null;
+                    if (issueEl.TryGetProperty("created_on", out var createdOnProp) && DateTime.TryParse(createdOnProp.GetString(), out var cDate))
+                    {
+                        createdOn = cDate;
+                    }
+
+                    DateTime? updatedOn = null;
+                    if (issueEl.TryGetProperty("updated_on", out var updatedOnProp) && DateTime.TryParse(updatedOnProp.GetString(), out var uDate))
+                    {
+                        updatedOn = uDate;
+                    }
+
+                    return Ok(new IssueDto
+                    {
+                        Id = createdId,
+                        Subject = createdSubject,
+                        Description = createdDesc,
+                        StatusId = statusId,
+                        StatusName = statusName,
+                        AssignedToId = assignedToId,
+                        AssignedToName = assignedToName,
+                        CreatedOn = createdOn,
+                        UpdatedOn = updatedOn
+                    });
                 }
                 else
                 {
-                    newIssue.Tracker = IdentifiableName.Create<IdentifiableName>(1); // Fallback para ID 1 (Bug)
+                    var errorContent = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+                    var friendlyError = ExtractRedmineErrorMessage(errorContent, response.StatusCode, "Falha ao criar tarefa no Redmine");
+                    return BadRequest(friendlyError);
                 }
-
-                if (request.AssignedToId.HasValue)
-                {
-                    newIssue.AssignedTo = IdentifiableName.Create<IdentifiableName>(request.AssignedToId.Value);
-                }
-
-                var createdIssue = manager.CreateObject<Issue>(newIssue);
-
-                return Ok(new IssueDto
-                {
-                    Id = createdIssue.Id,
-                    Subject = createdIssue.Subject,
-                    Description = createdIssue.Description ?? string.Empty,
-                    StatusId = createdIssue.Status.Id,
-                    StatusName = createdIssue.Status.Name,
-                    AssignedToId = createdIssue.AssignedTo?.Id,
-                    AssignedToName = createdIssue.AssignedTo?.Name ?? "Sem atribuição",
-                    CreatedOn = createdIssue.CreatedOn,
-                    UpdatedOn = createdIssue.UpdatedOn
-                });
             }
             catch (Exception ex)
             {
@@ -429,8 +494,6 @@ namespace RedKanban.Backend.Controllers
                     }
                 }
 
-                // Ordena os comentários do mais novo para o mais antigo ou vice-versa. 
-                // Linhas do tempo geralmente são mais novas em baixo, mas podemos listar ordenado por data de criação.
                 journalsDto = journalsDto.OrderBy(j => j.CreatedOn).ToList();
 
                 return Ok(new IssueDetailsDto
@@ -455,7 +518,7 @@ namespace RedKanban.Backend.Controllers
                     return BadRequest("O comentário não pode ser vazio.");
                 }
 
-                AddIssueCommentDirect(id, request.Notes);
+                AddIssueCommentDirect(id, request.Notes, request.Attachments);
                 return Ok();
             }
             catch (KeyNotFoundException ex)
@@ -528,6 +591,72 @@ namespace RedKanban.Backend.Controllers
             return Ok(new { redmineUrl = url });
         }
 
+        [HttpPost("upload")]
+        [Consumes("multipart/form-data")]
+        public async System.Threading.Tasks.Task<IActionResult> UploadFile(IFormFile file)
+        {
+            try
+            {
+                var url = _clientProvider.RedmineUrl;
+                var apiKey = _clientProvider.ApiKey;
+
+                if (string.IsNullOrWhiteSpace(url) || string.IsNullOrWhiteSpace(apiKey))
+                {
+                    return BadRequest("A URL ou a API Key do Redmine não foi fornecida nos headers.");
+                }
+
+                if (file == null || file.Length == 0)
+                {
+                    return BadRequest("Nenhum arquivo enviado.");
+                }
+
+                bool isDocker = Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER") == "true";
+                if (isDocker && (url.Contains("localhost") || url.Contains("127.0.0.1")))
+                {
+                    url = System.Text.RegularExpressions.Regex.Replace(url, @"(localhost|127\.0\.0\.1)(:\d+)?", "redmine:3000");
+                }
+
+                var handler = new System.Net.Http.HttpClientHandler
+                {
+                    ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true
+                };
+
+                using var client = new System.Net.Http.HttpClient(handler);
+                client.DefaultRequestHeaders.Add("X-Redmine-API-Key", apiKey);
+
+                var targetUrl = $"{url.TrimEnd('/')}/uploads.json?filename={Uri.EscapeDataString(file.FileName)}";
+                
+                using var stream = file.OpenReadStream();
+                using var content = new System.Net.Http.StreamContent(stream);
+                content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(file.ContentType ?? "application/octet-stream");
+
+                var response = await client.PostAsync(targetUrl, content);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    var responseBody = await response.Content.ReadAsStringAsync();
+                    using var doc = System.Text.Json.JsonDocument.Parse(responseBody);
+                    if (doc.RootElement.TryGetProperty("upload", out var uploadEl) && uploadEl.TryGetProperty("token", out var tokenEl))
+                    {
+                        var token = tokenEl.GetString();
+                        if (!string.IsNullOrWhiteSpace(token))
+                        {
+                            return Ok(new { token, filename = file.FileName, contentType = file.ContentType });
+                        }
+                    }
+                    return BadRequest("Arquivo enviado ao Redmine, mas nenhum token de upload foi retornado.");
+                }
+
+                var errorContent = await response.Content.ReadAsStringAsync();
+                var friendlyError = ExtractRedmineErrorMessage(errorContent, response.StatusCode, "Erro ao enviar arquivo para o Redmine");
+                return StatusCode((int)response.StatusCode, friendlyError);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"Erro ao conectar com o Redmine para upload: {ex.Message}");
+            }
+        }
+
         [HttpPost("login")]
         public async System.Threading.Tasks.Task<ActionResult<object>> Login([FromBody] LoginRequest request)
         {
@@ -549,14 +678,12 @@ namespace RedKanban.Backend.Controllers
                     return BadRequest("Usuário e senha são obrigatórios.");
                 }
 
-                // Traduz para o container docker se necessário
                 bool isDocker = Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER") == "true";
                 if (isDocker && (url.Contains("localhost") || url.Contains("127.0.0.1")))
                 {
                     url = System.Text.RegularExpressions.Regex.Replace(url, @"(localhost|127\.0\.0\.1)(:\d+)?", "redmine:3000");
                 }
 
-                // Desativa a validação do certificado SSL corporativo/interno para a chamada de backend
                 var handler = new System.Net.Http.HttpClientHandler
                 {
                     ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true
@@ -610,7 +737,6 @@ namespace RedKanban.Backend.Controllers
                     return Ok(new { loggedIn = false, message = "A URL do Redmine não está configurada." });
                 }
 
-                // Traduz para o container docker se necessário
                 bool isDocker = Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER") == "true";
                 if (isDocker && (url.Contains("localhost") || url.Contains("127.0.0.1")))
                 {
@@ -627,7 +753,6 @@ namespace RedKanban.Backend.Controllers
                     return Ok(new { loggedIn = false, message = "Nenhum cookie enviado pelo navegador no header 'Cookie'." });
                 }
 
-                // Desativa a validação do certificado SSL corporativo/interno para a chamada de backend
                 var handler = new System.Net.Http.HttpClientHandler
                 {
                     ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true
@@ -710,7 +835,6 @@ namespace RedKanban.Backend.Controllers
             }
         }
 
-        // Helpers para metadados de Sprints (salvos na descrição das Versões do Redmine)
         private static (string goal, DateTime? startDate, string status) ParseSprintMetadata(string? description, string redmineStatus)
         {
             if (string.IsNullOrWhiteSpace(description))
@@ -757,7 +881,6 @@ namespace RedKanban.Backend.Controllers
             return $"{goal}\n\n---\n[SprintMetadata: {metaJson}]";
         }
 
-        // Helper para extrair Story Points ou Estimated Hours da Issue
         private static double? GetStoryPoints(Issue issue)
         {
             if (issue.CustomFields != null)
@@ -779,7 +902,6 @@ namespace RedKanban.Backend.Controllers
             return issue.EstimatedHours.HasValue ? (double)issue.EstimatedHours.Value : null;
         }
 
-        // Helper para atualizar ou limpar fixed_version_id com compatibilidade para Redmine 3.3.2
         private void UpdateIssueFixedVersion(int issueId, int? sprintId)
         {
             var url = _clientProvider.RedmineUrl;
@@ -790,13 +912,11 @@ namespace RedKanban.Backend.Controllers
                 throw new InvalidOperationException("A URL ou a API Key do Redmine não foi fornecida.");
             }
 
-            // Montar e enviar a requisição HTTP PUT de compatibilidade
             using var client = new System.Net.Http.HttpClient();
             client.DefaultRequestHeaders.Add("X-Redmine-API-Key", apiKey);
 
             var endpoint = $"{url.TrimEnd('/')}/issues/{issueId}.json";
             
-            // Se sprintId for nulo, passamos "" (string vazia) para limpar o campo no Redmine 3.3.2
             var fixedVersionValue = sprintId.HasValue ? sprintId.Value.ToString() : "\"\"";
             
             var jsonPayload = $"{{\"issue\": {{\"fixed_version_id\": {fixedVersionValue}}}}}";
@@ -894,7 +1014,7 @@ namespace RedKanban.Backend.Controllers
             }
         }
 
-        private void AddIssueCommentDirect(int issueId, string notes)
+        private void AddIssueCommentDirect(int issueId, string notes, List<AttachmentDto>? attachments)
         {
             var url = _clientProvider.RedmineUrl;
             var apiKey = _clientProvider.ApiKey;
@@ -908,9 +1028,22 @@ namespace RedKanban.Backend.Controllers
             client.DefaultRequestHeaders.Add("X-Redmine-API-Key", apiKey);
 
             var endpoint = $"{url.TrimEnd('/')}/issues/{issueId}.json";
-            var escapedNotes = System.Text.Json.JsonSerializer.Serialize(notes);
-            var jsonPayload = $"{{\"issue\": {{\"notes\": {escapedNotes}}}}}";
+            
+            var payloadObj = new
+            {
+                issue = new
+                {
+                    notes = notes,
+                    uploads = attachments?.Select(a => new
+                    {
+                        token = a.Token,
+                        filename = a.Filename,
+                        content_type = a.ContentType
+                    }).ToList()
+                }
+            };
 
+            var jsonPayload = System.Text.Json.JsonSerializer.Serialize(payloadObj);
             var content = new System.Net.Http.StringContent(jsonPayload, System.Text.Encoding.UTF8, "application/json");
 
             var response = client.PutAsync(endpoint, content).GetAwaiter().GetResult();
@@ -925,7 +1058,6 @@ namespace RedKanban.Backend.Controllers
                 throw new Exception(friendlyError);
             }
         }
-
 
         [HttpPost("sprints")]
         public ActionResult<SprintDto> CreateSprint([FromBody] CreateSprintRequest request)

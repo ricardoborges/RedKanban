@@ -1,8 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { fetchIssueDetails, addComment, type IssueDetails, type Journal } from '../services/api';
+  import { fetchIssueDetails, addComment, uploadFile, type IssueDetails, type Journal } from '../services/api';
   import { i18n } from '../services/i18n.svelte';
-  import { X, Send, Loader2, MessageSquare, History, User, Calendar, ExternalLink } from '@lucide/svelte';
+  import { X, Send, Loader2, MessageSquare, History, User, Calendar, ExternalLink, Plus } from '@lucide/svelte';
 
   // Svelte 5 props
   let { issueId, redmineUrl, onclose, oncommentAdded } = $props<{
@@ -17,6 +17,11 @@
   let commentNotes = $state('');
   let submittingComment = $state(false);
   let errorMsg = $state('');
+
+  // File attachments state
+  let attachments = $state<{ token: string; filename: string; contentType: string }[]>([]);
+  let uploadingFiles = $state(false);
+  let fileError = $state('');
 
   let redmineIssueUrl = $derived(details ? `${redmineUrl}/issues/${details.issue.id}` : '');
 
@@ -36,13 +41,44 @@
     }
   }
 
+  async function handleFileChange(event: Event) {
+    const input = event.target as HTMLInputElement;
+    if (!input.files || input.files.length === 0) return;
+    
+    uploadingFiles = true;
+    fileError = '';
+    
+    const filesArray = Array.from(input.files);
+    
+    try {
+      const uploadPromises = filesArray.map(async (file) => {
+        const uploadResult = await uploadFile(file);
+        return uploadResult;
+      });
+      
+      const results = await Promise.all(uploadPromises);
+      attachments = [...attachments, ...results];
+    } catch (err: any) {
+      console.error(err);
+      fileError = err.message || i18n.t('uploadFailed');
+    } finally {
+      uploadingFiles = false;
+      input.value = ''; // Reset input
+    }
+  }
+
+  function removeAttachment(index: number) {
+    attachments = attachments.filter((_, i) => i !== index);
+  }
+
   async function handleSubmitComment() {
-    if (!commentNotes.trim()) return;
+    if (!commentNotes.trim() && attachments.length === 0) return;
     submittingComment = true;
     errorMsg = '';
     try {
-      await addComment(issueId, commentNotes.trim());
+      await addComment(issueId, commentNotes.trim(), attachments);
       commentNotes = '';
+      attachments = [];
       // Recarrega os detalhes para mostrar o comentário novo na timeline
       await loadDetails();
       oncommentAdded();
@@ -220,19 +256,54 @@
 
     <!-- Modal Footer / Comment Input -->
     {#if details}
-      <div class="border-t border-zinc-100 dark:border-zinc-800 p-4 bg-zinc-50 dark:bg-zinc-900/90">
+      <div class="border-t border-zinc-100 dark:border-zinc-800 p-4 bg-zinc-50 dark:bg-zinc-900/90 space-y-3">
+        <!-- Attachments List -->
+        {#if attachments.length > 0}
+          <div class="flex flex-wrap gap-2">
+            {#each attachments as att, idx}
+              <div class="inline-flex items-center gap-1.5 px-3 py-1 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl text-[10px] text-zinc-700 dark:text-zinc-350 shadow-sm max-w-[200px]">
+                <span class="truncate font-medium">{att.filename}</span>
+                <button
+                  type="button"
+                  onclick={() => removeAttachment(idx)}
+                  class="text-zinc-400 hover:text-red-500 hover:bg-zinc-100 dark:hover:bg-zinc-900 p-0.5 rounded transition-all cursor-pointer"
+                >
+                  <X class="w-3 h-3" />
+                </button>
+              </div>
+            {/each}
+          </div>
+        {/if}
+
         <form onsubmit={(e) => { e.preventDefault(); handleSubmitComment(); }} class="flex items-center gap-3">
+          <!-- Clip Icon / File Selector Button -->
+          <label class="p-3 bg-white hover:bg-zinc-100 dark:bg-zinc-950/60 dark:hover:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-xl transition-all cursor-pointer shadow-sm relative flex items-center justify-center shrink-0">
+            {#if uploadingFiles}
+              <Loader2 class="w-4 h-4 animate-spin text-indigo-500" />
+            {:else}
+              <Plus class="w-4 h-4" />
+            {/if}
+            <input
+              type="file"
+              multiple
+              onchange={handleFileChange}
+              class="hidden"
+              disabled={uploadingFiles || submittingComment}
+            />
+          </label>
+
           <input
             type="text"
             bind:value={commentNotes}
             placeholder={i18n.t('writeCommentPlaceholder')}
-            class="flex-1 bg-white dark:bg-zinc-950/60 border border-zinc-200 dark:border-zinc-800 focus:border-indigo-500 rounded-xl px-4 py-3 text-sm text-zinc-800 dark:text-zinc-200 focus:outline-none transition-all"
+            class="flex-1 bg-white dark:bg-zinc-950/60 border border-zinc-200 dark:border-zinc-800 focus:border-indigo-500 rounded-xl px-4 py-3 text-sm text-zinc-800 dark:text-zinc-200 focus:outline-none transition-all shadow-inner"
             disabled={submittingComment}
           />
+          
           <button
             type="submit"
-            disabled={submittingComment || !commentNotes.trim()}
-            class="bg-indigo-600 hover:bg-indigo-500 disabled:bg-zinc-100 dark:disabled:bg-zinc-800 text-white font-medium p-3 rounded-xl transition-all cursor-pointer flex items-center justify-center shrink-0 disabled:text-zinc-400 dark:disabled:text-zinc-600"
+            disabled={submittingComment || (!commentNotes.trim() && attachments.length === 0) || uploadingFiles}
+            class="bg-indigo-600 hover:bg-indigo-500 disabled:bg-zinc-100 dark:disabled:bg-zinc-800 text-white font-medium p-3 rounded-xl transition-all cursor-pointer flex items-center justify-center shrink-0 disabled:text-zinc-400 dark:disabled:text-zinc-600 shadow-md shadow-indigo-600/10"
           >
             {#if submittingComment}
               <Loader2 class="w-4 h-4 animate-spin" />
@@ -241,8 +312,13 @@
             {/if}
           </button>
         </form>
+
+        {#if fileError}
+          <p class="text-[10px] text-red-600 dark:text-red-400 pl-1">{fileError}</p>
+        {/if}
+
         {#if errorMsg}
-          <p class="text-[11px] text-red-600 dark:text-red-400 mt-2 pl-1">{errorMsg}</p>
+          <p class="text-[11px] text-red-600 dark:text-red-400 pl-1">{errorMsg}</p>
         {/if}
       </div>
     {/if}

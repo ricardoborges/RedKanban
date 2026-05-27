@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { createIssue, moveIssueToSprint, type Issue, type Status, type User as RedmineUser } from '../services/api';
+  import { createIssue, moveIssueToSprint, uploadFile, type Issue, type Status, type User as RedmineUser } from '../services/api';
   import { i18n } from '../services/i18n.svelte';
   import { Plus, X, Loader2 } from '@lucide/svelte';
 
@@ -27,6 +27,41 @@
   let creating = $state(false);
   let errorMsg = $state('');
 
+  // File attachments state
+  let attachments = $state<{ token: string; filename: string; contentType: string }[]>([]);
+  let uploadingFiles = $state(false);
+  let fileError = $state('');
+
+  async function handleFileChange(event: Event) {
+    const input = event.target as HTMLInputElement;
+    if (!input.files || input.files.length === 0) return;
+    
+    uploadingFiles = true;
+    fileError = '';
+    
+    const filesArray = Array.from(input.files);
+    
+    try {
+      const uploadPromises = filesArray.map(async (file) => {
+        const uploadResult = await uploadFile(file);
+        return uploadResult;
+      });
+      
+      const results = await Promise.all(uploadPromises);
+      attachments = [...attachments, ...results];
+    } catch (err: any) {
+      console.error(err);
+      fileError = err.message || i18n.t('uploadFailed');
+    } finally {
+      uploadingFiles = false;
+      input.value = ''; // Reset input
+    }
+  }
+
+  function removeAttachment(index: number) {
+    attachments = attachments.filter((_, i) => i !== index);
+  }
+
   async function handleCreate() {
     if (!subject.trim()) return;
     creating = true;
@@ -36,7 +71,8 @@
         subject.trim(),
         description.trim(),
         statusId,
-        assignedToId
+        assignedToId,
+        attachments
       );
 
       // If a sprintId is provided, associate the task with it immediately
@@ -44,7 +80,6 @@
         try {
           await moveIssueToSprint(newIssue.id, sprintId);
           newIssue.sprintId = sprintId;
-          // Note: sprintName can be refreshed when the view reloads
         } catch (sprintErr) {
           console.warn('Erro ao associar nova tarefa à sprint:', sprintErr);
         }
@@ -80,7 +115,7 @@
           id="new-subject"
           type="text"
           bind:value={subject}
-          placeholder={i18n.currentLanguage === 'pt-br' ? 'Digite o título da tarefa...' : i18n.currentLanguage === 'es' ? 'Escriba el título de la tarea...' : 'Enter task title...'}
+          placeholder={i18n.currentLanguage === 'pt-br' ? 'Digite o título da tarefa...' : i18n.currentLanguage === 'es' ? 'Escriba el título de la tarefa...' : 'Enter task title...'}
           class="w-full bg-white dark:bg-zinc-950/50 border border-zinc-200 dark:border-zinc-800 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-zinc-800 dark:text-zinc-200 focus:outline-none transition-all shadow-inner"
           required
           disabled={creating}
@@ -130,6 +165,58 @@
         </div>
       </div>
 
+      <!-- File Attachments Section -->
+      <div class="space-y-2">
+        <label class="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+          {i18n.t('attachmentsLabel')}
+        </label>
+        
+        <!-- File list -->
+        {#if attachments.length > 0}
+          <div class="space-y-1.5 max-h-32 overflow-y-auto mb-2">
+            {#each attachments as att, idx}
+              <div class="flex items-center justify-between gap-2 px-3 py-1.5 bg-zinc-50 dark:bg-zinc-950/20 border border-zinc-200/80 dark:border-zinc-800/80 rounded-xl text-xs">
+                <span class="truncate text-zinc-700 dark:text-zinc-350 max-w-[320px] font-medium">{att.filename}</span>
+                <button
+                  type="button"
+                  onclick={() => removeAttachment(idx)}
+                  class="text-zinc-400 hover:text-red-500 hover:bg-zinc-200/50 dark:hover:bg-zinc-800 p-1 rounded-lg transition-colors cursor-pointer"
+                  title="Remover anexo"
+                >
+                  <X class="w-3.5 h-3.5" />
+                </button>
+              </div>
+            {/each}
+          </div>
+        {/if}
+
+        <!-- Upload file button -->
+        <div class="flex items-center gap-2">
+          <label
+            class="px-4 py-2 bg-zinc-100 hover:bg-zinc-200/60 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 font-semibold rounded-xl text-xs cursor-pointer border border-zinc-200 dark:border-zinc-800/80 shadow-sm inline-flex items-center gap-1.5 transition-all"
+          >
+            {#if uploadingFiles}
+              <Loader2 class="w-3.5 h-3.5 animate-spin" />
+              <span>{i18n.t('uploadingFile')}</span>
+            {:else}
+              <Plus class="w-3.5 h-3.5" />
+              <span>{i18n.t('attachFile')}</span>
+            {/if}
+            <input
+              type="file"
+              multiple
+              onchange={handleFileChange}
+              class="hidden"
+              disabled={uploadingFiles || creating}
+            />
+          </label>
+
+          {#if fileError}
+            <span class="text-2xs font-semibold text-red-500 dark:text-red-400">{fileError}</span>
+          {/if}
+        </div>
+      </div>
+
       {#if errorMsg}
         <p class="text-xs text-red-600 dark:text-red-400 font-medium pl-1">{errorMsg}</p>
       {/if}
@@ -146,7 +233,7 @@
         <button
           type="submit"
           class="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-xl text-xs transition-all cursor-pointer flex items-center gap-1.5 shadow-md shadow-indigo-600/10"
-          disabled={creating || !subject.trim()}
+          disabled={creating || !subject.trim() || uploadingFiles}
         >
           {#if creating}
             <Loader2 class="w-3.5 h-3.5 animate-spin" />

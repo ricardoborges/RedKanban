@@ -47,6 +47,10 @@ const translations: Record<Language, Record<string, string>> = {
     successConnected: 'Successfully connected to project: {name}',
     validatingConnection: 'Validating Connection...',
     saveAndLoad: 'Save & Load Kanban',
+    attachFile: 'Attach File',
+    uploadingFile: 'Uploading file...',
+    uploadFailed: 'Failed to upload file.',
+    attachmentsLabel: 'Attachments',
 
     // StatusConfigPanel
     statusTitle: 'Kanban Columns Configuration',
@@ -246,6 +250,10 @@ const translations: Record<Language, Record<string, string>> = {
     successConnected: 'Conectado com sucesso ao projeto: {name}',
     validatingConnection: 'Validando Conexão...',
     saveAndLoad: 'Salvar & Carregar Kanban',
+    attachFile: 'Anexar Arquivo',
+    uploadingFile: 'Enviando arquivo...',
+    uploadFailed: 'Falha ao enviar arquivo.',
+    attachmentsLabel: 'Anexos',
 
     // StatusConfigPanel
     statusTitle: 'Configuração de Colunas do Kanban',
@@ -445,6 +453,10 @@ const translations: Record<Language, Record<string, string>> = {
     successConnected: 'Conectado con éxito al proyecto: {name}',
     validatingConnection: 'Validando Conexión...',
     saveAndLoad: 'Guardar y Cargar Kanban',
+    attachFile: 'Adjuntar Archivo',
+    uploadingFile: 'Subiendo archivo...',
+    uploadFailed: 'Error al subir archivo.',
+    attachmentsLabel: 'Adjuntos',
 
     // StatusConfigPanel
     statusTitle: 'Configuración de Columnas de Kanban',
