@@ -39,12 +39,14 @@
     redmineUrl,
     projectName = 'Scrum Kanban',
     onOpenSettings,
-    loading = $bindable(true)
+    loading = $bindable(true),
+    lastUpdatedText = $bindable('')
   } = $props<{
     redmineUrl: string;
     projectName?: string;
     onOpenSettings: () => void;
     loading?: boolean;
+    lastUpdatedText?: string;
   }>();
 
 
@@ -70,6 +72,12 @@
       ? i18n.formatDateTime(lastUpdated)
       : ''
   );
+
+  $effect(() => {
+    lastUpdatedText = formattedLastUpdated
+      ? i18n.t('lastUpdated', { time: formattedLastUpdated })
+      : '';
+  });
 
   let activeSprint = $derived(sprints.find(s => s.status === 'active'));
 
@@ -306,28 +314,7 @@
 </script>
 
 <div class="flex flex-col h-full space-y-4">
-  <!-- Top Bar -->
-  <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-zinc-200 dark:border-zinc-800/80 pb-4">
-    <div class="flex items-center gap-2">
-      <div class="p-2 bg-indigo-50 dark:bg-indigo-500/10 rounded-lg text-indigo-600 dark:text-indigo-400">
-        <Sparkles class="w-5 h-5" />
-      </div>
-      <div>
-        <h1 class="text-xl font-bold text-zinc-800 dark:text-zinc-100">{projectName}</h1>
-        <p class="text-xs text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5 flex-wrap">
-          <span>{i18n.currentLanguage === 'pt-br' ? 'Tarefas integradas via API do Redmine' : i18n.currentLanguage === 'es' ? 'Tareas integradas a través de la API de Redmine' : 'Integrated tasks via Redmine API'}</span>
-          {#if formattedLastUpdated}
-            <span class="text-zinc-300 dark:text-zinc-700">•</span>
-            <span class="font-medium text-indigo-600 dark:text-indigo-400">
-              {i18n.t('lastUpdated', { time: formattedLastUpdated })}
-            </span>
-          {/if}
-        </p>
-      </div>
-    </div>
 
-
-  </div>
 
   <!-- Tab Navigation -->
   <div class="flex border-b border-zinc-200 dark:border-zinc-800 pb-px">

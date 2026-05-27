@@ -23,6 +23,7 @@
   let loadingProjects = $state(false);
   let boardRef = $state<any>(null);
   let boardLoading = $state(true);
+  let lastUpdatedText = $state('');
 
   let userInitials = $derived(
     currentUser && currentUser.name
@@ -287,6 +288,11 @@
               <div class="w-3.5 h-3.5 border-2 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin"></div>
             </div>
           {/if}
+          {#if lastUpdatedText && !showSettings}
+            <span class="text-xs font-semibold text-indigo-600 dark:text-indigo-400 ml-4 hidden md:inline shrink-0">
+              {lastUpdatedText}
+            </span>
+          {/if}
         {/if}
       </div>
     </div>
@@ -419,7 +425,7 @@
       </div>
     {:else if configured && hasColumnsConfigured && hasCardStyleConfigured}
       <div class="flex-1">
-        <KanbanBoard bind:this={boardRef} bind:loading={boardLoading} {redmineUrl} {projectName} onOpenSettings={openSettings} />
+        <KanbanBoard bind:this={boardRef} bind:loading={boardLoading} bind:lastUpdatedText={lastUpdatedText} {redmineUrl} {projectName} onOpenSettings={openSettings} />
       </div>
     {:else}
       <!-- Fallback when config error and no settings shown -->
