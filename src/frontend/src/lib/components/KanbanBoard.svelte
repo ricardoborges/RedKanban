@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, untrack } from 'svelte';
+  import { untrack } from 'svelte';
   import {
     fetchKanbanData,
     fetchUsers,
@@ -94,27 +94,12 @@
   // Estado para drag and drop
   let dragOverColumnId = $state<number | null>(null);
 
-  let intervalId: any;
-
   $effect(() => {
     projectName;
     redmineUrl;
     untrack(() => {
       loadData();
     });
-  });
-
-  onMount(() => {
-    // Atualiza os dados a cada 1 minuto (60.000 ms)
-    intervalId = setInterval(() => {
-      loadData();
-    }, 60000);
-
-    return () => {
-      if (intervalId) {
-        clearInterval(intervalId);
-      }
-    };
   });
 
   async function loadData() {
