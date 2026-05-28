@@ -411,3 +411,55 @@ export async function uploadFile(file: File): Promise<{ token: string; filename:
 
   return response.json();
 }
+
+export interface ProjectFile {
+  id: number;
+  filename: string;
+  filesize: number;
+  created_on: string;
+  description: string;
+  downloads: number;
+  digest: string;
+  content_url: string;
+  author: {
+    id: number;
+    name: string;
+  };
+}
+
+export async function fetchProjectFiles(): Promise<ProjectFile[]> {
+  const headers = getHeaders();
+  const response = await fetch(`${BACKEND_BASE_URL}/files`, { headers });
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(errorText || 'Erro ao obter arquivos do projeto.');
+  }
+  const data = await response.json();
+  return data.files || [];
+}
+
+export async function addProjectFile(token: string, filename: string, description: string): Promise<void> {
+  const headers = getHeaders();
+  const response = await fetch(`${BACKEND_BASE_URL}/files`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ token, filename, description }),
+  });
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(errorText || 'Erro ao associar arquivo ao projeto.');
+  }
+}
+
+export async function deleteProjectFile(id: number): Promise<void> {
+  const headers = getHeaders();
+  const response = await fetch(`${BACKEND_BASE_URL}/files/${id}`, {
+    method: 'DELETE',
+    headers,
+  });
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(errorText || 'Erro ao excluir o arquivo do projeto.');
+  }
+}
+

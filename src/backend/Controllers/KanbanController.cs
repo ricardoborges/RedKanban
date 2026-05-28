@@ -1205,6 +1205,167 @@ namespace RedKanban.Backend.Controllers
             }
         }
 
+        public class AddProjectFileRequest
+        {
+            public string? Token { get; set; }
+            public string? Filename { get; set; }
+            public string? Description { get; set; }
+        }
+
+        [HttpGet("files")]
+        public async System.Threading.Tasks.Task<IActionResult> GetProjectFiles()
+        {
+            try
+            {
+                var url = _clientProvider.RedmineUrl;
+                var apiKey = _clientProvider.ApiKey;
+                var projectIdentifier = _clientProvider.ProjectIdentifier;
+
+                if (string.IsNullOrWhiteSpace(url) || string.IsNullOrWhiteSpace(apiKey) || string.IsNullOrWhiteSpace(projectIdentifier))
+                {
+                    return BadRequest("A URL, a API Key ou o Identificador do projeto do Redmine não foi configurado.");
+                }
+
+                bool isDocker = Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER") == "true";
+                if (isDocker && (url.Contains("localhost") || url.Contains("127.0.0.1")))
+                {
+                    url = System.Text.RegularExpressions.Regex.Replace(url, @"(localhost|127\.0\.0\.1)(:\d+)?", "redmine:3000");
+                }
+
+                var handler = new System.Net.Http.HttpClientHandler
+                {
+                    ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true
+                };
+
+                using var client = new System.Net.Http.HttpClient(handler);
+                client.DefaultRequestHeaders.Add("X-Redmine-API-Key", apiKey);
+
+                var targetUrl = $"{url.TrimEnd('/')}/projects/{projectIdentifier}/files.json";
+                var response = await client.GetAsync(targetUrl);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    var content = await response.Content.ReadAsStringAsync();
+                    return Content(content, "application/json");
+                }
+
+                var errorContent = await response.Content.ReadAsStringAsync();
+                return StatusCode((int)response.StatusCode, errorContent);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"Erro ao buscar arquivos do projeto: {ex.Message}");
+            }
+        }
+
+        [HttpPost("files")]
+        public async System.Threading.Tasks.Task<IActionResult> AddProjectFile([FromBody] AddProjectFileRequest request)
+        {
+            try
+            {
+                var url = _clientProvider.RedmineUrl;
+                var apiKey = _clientProvider.ApiKey;
+                var projectIdentifier = _clientProvider.ProjectIdentifier;
+
+                if (string.IsNullOrWhiteSpace(url) || string.IsNullOrWhiteSpace(apiKey) || string.IsNullOrWhiteSpace(projectIdentifier))
+                {
+                    return BadRequest("A URL, a API Key ou o Identificador do projeto do Redmine não foi configurado.");
+                }
+
+                if (string.IsNullOrWhiteSpace(request.Token) || string.IsNullOrWhiteSpace(request.Filename))
+                {
+                    return BadRequest("Token e Filename são obrigatórios.");
+                }
+
+                bool isDocker = Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER") == "true";
+                if (isDocker && (url.Contains("localhost") || url.Contains("127.0.0.1")))
+                {
+                    url = System.Text.RegularExpressions.Regex.Replace(url, @"(localhost|127\.0\.0\.1)(:\d+)?", "redmine:3000");
+                }
+
+                var handler = new System.Net.Http.HttpClientHandler
+                {
+                    ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true
+                };
+
+                using var client = new System.Net.Http.HttpClient(handler);
+                client.DefaultRequestHeaders.Add("X-Redmine-API-Key", apiKey);
+
+                var targetUrl = $"{url.TrimEnd('/')}/projects/{projectIdentifier}/files.json";
+                var payload = new
+                {
+                    file = new
+                    {
+                        token = request.Token,
+                        filename = request.Filename,
+                        description = request.Description ?? string.Empty
+                    }
+                };
+
+                var jsonPayload = System.Text.Json.JsonSerializer.Serialize(payload);
+                var content = new System.Net.Http.StringContent(jsonPayload, System.Text.Encoding.UTF8, "application/json");
+
+                var response = await client.PostAsync(targetUrl, content);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    return Ok();
+                }
+
+                var errorContent = await response.Content.ReadAsStringAsync();
+                var friendlyError = ExtractRedmineErrorMessage(errorContent, response.StatusCode, "Erro ao associar arquivo ao projeto");
+                return StatusCode((int)response.StatusCode, friendlyError);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"Erro ao criar arquivo no projeto: {ex.Message}");
+            }
+        }
+
+        [HttpDelete("files/{id}")]
+        public async System.Threading.Tasks.Task<IActionResult> DeleteProjectFile(int id)
+        {
+            try
+            {
+                var url = _clientProvider.RedmineUrl;
+                var apiKey = _clientProvider.ApiKey;
+
+                if (string.IsNullOrWhiteSpace(url) || string.IsNullOrWhiteSpace(apiKey))
+                {
+                    return BadRequest("A URL ou a API Key do Redmine não foi configurada.");
+                }
+
+                bool isDocker = Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER") == "true";
+                if (isDocker && (url.Contains("localhost") || url.Contains("127.0.0.1")))
+                {
+                    url = System.Text.RegularExpressions.Regex.Replace(url, @"(localhost|127\.0\.0\.1)(:\d+)?", "redmine:3000");
+                }
+
+                var handler = new System.Net.Http.HttpClientHandler
+                {
+                    ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true
+                };
+
+                using var client = new System.Net.Http.HttpClient(handler);
+                client.DefaultRequestHeaders.Add("X-Redmine-API-Key", apiKey);
+
+                var targetUrl = $"{url.TrimEnd('/')}/attachments/{id}.json";
+                var response = await client.DeleteAsync(targetUrl);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    return NoContent();
+                }
+
+                var errorContent = await response.Content.ReadAsStringAsync();
+                return StatusCode((int)response.StatusCode, errorContent);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"Erro ao excluir arquivo: {ex.Message}");
+            }
+        }
+
         private static string ExtractRedmineErrorMessage(string errorContent, System.Net.HttpStatusCode statusCode, string defaultMessage)
         {
             if (string.IsNullOrWhiteSpace(errorContent))
