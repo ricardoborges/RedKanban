@@ -1012,6 +1012,24 @@ namespace RedKanban.Backend.Controllers
                 var friendlyError = ExtractRedmineErrorMessage(errorContent, response.StatusCode, "Falha ao atualizar status da tarefa no Redmine");
                 throw new Exception(friendlyError);
             }
+
+            // Verify if status was actually updated (Redmine might ignore the update if the user does not have workflow permission)
+            var getResponse = client.GetAsync(endpoint).GetAwaiter().GetResult();
+            if (getResponse.IsSuccessStatusCode)
+            {
+                var getBody = getResponse.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+                using var doc = System.Text.Json.JsonDocument.Parse(getBody);
+                if (doc.RootElement.TryGetProperty("issue", out var issueEl) &&
+                    issueEl.TryGetProperty("status", out var statusEl) &&
+                    statusEl.TryGetProperty("id", out var actualStatusIdEl))
+                {
+                    var actualStatusId = actualStatusIdEl.GetInt32();
+                    if (actualStatusId != statusId)
+                    {
+                        throw new Exception("Você não tem permissão no Redmine para realizar esta transição de status.");
+                    }
+                }
+            }
         }
 
         private void AddIssueCommentDirect(int issueId, string notes, List<AttachmentDto>? attachments)
