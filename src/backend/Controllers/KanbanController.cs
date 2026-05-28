@@ -1213,47 +1213,57 @@ namespace RedKanban.Backend.Controllers
         }
 
         [HttpGet("files")]
-        public ActionResult GetProjectFiles()
+        public async System.Threading.Tasks.Task<IActionResult> GetProjectFiles()
         {
             try
             {
-                var manager = _clientProvider.GetManager();
+                var url = _clientProvider.RedmineUrl;
+                var apiKey = _clientProvider.ApiKey;
                 var projectIdentifier = _clientProvider.ProjectIdentifier;
 
-                if (string.IsNullOrWhiteSpace(projectIdentifier))
+                if (string.IsNullOrWhiteSpace(url) || string.IsNullOrWhiteSpace(apiKey) || string.IsNullOrWhiteSpace(projectIdentifier))
                 {
-                    return BadRequest("O identificador do projeto (X-Redmine-Project-Identifier) é obrigatório.");
+                    return BadRequest("A URL, a API Key ou o Identificador do projeto do Redmine não foi configurado.");
                 }
 
-                var parameters = new NameValueCollection
+                url = url.Trim();
+                apiKey = apiKey.Trim();
+                projectIdentifier = projectIdentifier.Trim();
+
+                bool isDocker = Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER") == "true";
+                if (isDocker && (url.Contains("localhost") || url.Contains("127.0.0.1")))
                 {
-                    { "project_id", projectIdentifier }
+                    url = System.Text.RegularExpressions.Regex.Replace(url, @"(localhost|127\.0\.0\.1)(:\d+)?", "redmine:3000");
+                }
+
+                var manager = _clientProvider.GetManager();
+                var project = manager.GetObject<Project>(projectIdentifier, new NameValueCollection());
+                var projectId = project?.Id.ToString() ?? projectIdentifier;
+
+                var handler = new System.Net.Http.HttpClientHandler
+                {
+                    ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true
                 };
 
-                var files = manager.GetObjects<Redmine.Net.Api.Types.File>(parameters);
-                if (files == null)
+                using var client = new System.Net.Http.HttpClient(handler);
+                client.DefaultRequestHeaders.Add("X-Redmine-API-Key", apiKey);
+                client.DefaultRequestHeaders.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
+
+                var targetUrl = $"{url.TrimEnd('/')}/projects/{projectId}/files.json?key={apiKey}";
+                var response = await client.GetAsync(targetUrl);
+
+                if (response.IsSuccessStatusCode)
                 {
-                    return Ok(new { files = new List<object>() });
+                    var content = await response.Content.ReadAsStringAsync();
+                    return Content(content, "application/json");
                 }
 
-                var filesDto = files.Select(f => new
-                {
-                    id = f.Id,
-                    filename = f.Filename,
-                    filesize = f.FileSize,
-                    created_on = f.CreatedOn,
-                    description = f.Description,
-                    downloads = f.Downloads,
-                    digest = f.Digest,
-                    content_url = f.ContentUrl,
-                    author = f.Author != null ? new { id = f.Author.Id, name = f.Author.Name } : null
-                }).ToList();
-
-                return Ok(new { files = filesDto });
+                var errorContent = await response.Content.ReadAsStringAsync();
+                return StatusCode((int)response.StatusCode, errorContent);
             }
             catch (Exception ex)
             {
-                return BadRequest($"Erro ao buscar arquivos do projeto: {ex.Message}");
+                return StatusCode(500, $"Erro ao buscar arquivos do projeto: {ex.Message}");
             }
         }
 
@@ -1276,11 +1286,19 @@ namespace RedKanban.Backend.Controllers
                     return BadRequest("Token e Filename são obrigatórios.");
                 }
 
+                url = url.Trim();
+                apiKey = apiKey.Trim();
+                projectIdentifier = projectIdentifier.Trim();
+
                 bool isDocker = Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER") == "true";
                 if (isDocker && (url.Contains("localhost") || url.Contains("127.0.0.1")))
                 {
                     url = System.Text.RegularExpressions.Regex.Replace(url, @"(localhost|127\.0\.0\.1)(:\d+)?", "redmine:3000");
                 }
+
+                var manager = _clientProvider.GetManager();
+                var project = manager.GetObject<Project>(projectIdentifier, new NameValueCollection());
+                var projectId = project?.Id.ToString() ?? projectIdentifier;
 
                 var handler = new System.Net.Http.HttpClientHandler
                 {
@@ -1289,8 +1307,9 @@ namespace RedKanban.Backend.Controllers
 
                 using var client = new System.Net.Http.HttpClient(handler);
                 client.DefaultRequestHeaders.Add("X-Redmine-API-Key", apiKey);
+                client.DefaultRequestHeaders.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
 
-                var targetUrl = $"{url.TrimEnd('/')}/projects/{projectIdentifier}/files.json?key={apiKey}";
+                var targetUrl = $"{url.TrimEnd('/')}/projects/{projectId}/files.json?key={apiKey}";
                 var payload = new
                 {
                     file = new
@@ -1322,17 +1341,50 @@ namespace RedKanban.Backend.Controllers
         }
 
         [HttpDelete("files/{id}")]
-        public IActionResult DeleteProjectFile(int id)
+        public async System.Threading.Tasks.Task<IActionResult> DeleteProjectFile(int id)
         {
             try
             {
-                var manager = _clientProvider.GetManager();
-                manager.DeleteObject<Attachment>(id.ToString(), new NameValueCollection());
-                return NoContent();
+                var url = _clientProvider.RedmineUrl;
+                var apiKey = _clientProvider.ApiKey;
+
+                if (string.IsNullOrWhiteSpace(url) || string.IsNullOrWhiteSpace(apiKey))
+                {
+                    return BadRequest("A URL ou a API Key do Redmine não foi configurada.");
+                }
+
+                url = url.Trim();
+                apiKey = apiKey.Trim();
+
+                bool isDocker = Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER") == "true";
+                if (isDocker && (url.Contains("localhost") || url.Contains("127.0.0.1")))
+                {
+                    url = System.Text.RegularExpressions.Regex.Replace(url, @"(localhost|127\.0\.0\.1)(:\d+)?", "redmine:3000");
+                }
+
+                var handler = new System.Net.Http.HttpClientHandler
+                {
+                    ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true
+                };
+
+                using var client = new System.Net.Http.HttpClient(handler);
+                client.DefaultRequestHeaders.Add("X-Redmine-API-Key", apiKey);
+                client.DefaultRequestHeaders.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
+
+                var targetUrl = $"{url.TrimEnd('/')}/attachments/{id}.json?key={apiKey}";
+                var response = await client.DeleteAsync(targetUrl);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    return NoContent();
+                }
+
+                var errorContent = await response.Content.ReadAsStringAsync();
+                return StatusCode((int)response.StatusCode, errorContent);
             }
             catch (Exception ex)
             {
-                return BadRequest($"Erro ao excluir arquivo: {ex.Message}");
+                return StatusCode(500, $"Erro ao excluir arquivo: {ex.Message}");
             }
         }
 
