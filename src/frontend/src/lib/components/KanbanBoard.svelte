@@ -17,7 +17,6 @@
   import BacklogView from './BacklogView.svelte';
   import SprintModal from './SprintModal.svelte';
   import SprintDashboard from './SprintDashboard.svelte';
-  import ProjectFilesView from './ProjectFilesView.svelte';
   import {
     Plus,
     Loader2,
@@ -32,8 +31,7 @@
     Edit,
     CheckSquare,
     Calendar,
-    TrendingDown,
-    FolderOpen
+    TrendingDown
   } from '@lucide/svelte';
 
   // Svelte 5 props
@@ -62,7 +60,7 @@
   let showDashboard = $state(false);
 
   // Tab toggle state
-  let activeTab = $state<'board' | 'backlog' | 'files'>('board');
+  let activeTab = $state<'board' | 'backlog'>('board');
 
   // Sprint modal states
   let showSprintModal = $state(false);
@@ -334,13 +332,6 @@
       <Layers class="w-4 h-4" />
       <span>{i18n.currentLanguage === 'pt-br' ? 'Backlog & Planejamento' : i18n.currentLanguage === 'es' ? 'Backlog y Planificación' : 'Backlog & Planning'}</span>
     </button>
-    <button
-      onclick={() => (activeTab = 'files')}
-      class="px-4 py-2.5 text-xs font-semibold uppercase tracking-wider border-b-2 transition-all flex items-center gap-2 cursor-pointer {activeTab === 'files' ? 'border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400' : 'border-transparent text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200'}"
-    >
-      <FolderOpen class="w-4 h-4" />
-      <span>{i18n.currentLanguage === 'pt-br' ? 'Arquivos do Projeto' : i18n.currentLanguage === 'es' ? 'Archivos del Projeto' : 'Project Files'}</span>
-    </button>
   </div>
 
   <!-- Floating Error Toast -->
@@ -524,10 +515,6 @@
         onDataChanged={loadData}
         onOpenIssueDetails={(id) => (activeIssueId = id)}
       />
-    </div>
-  {:else if activeTab === 'files'}
-    <div class="flex-1 overflow-y-auto">
-      <ProjectFilesView />
     </div>
   {/if}
 
