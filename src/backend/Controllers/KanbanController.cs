@@ -1213,48 +1213,47 @@ namespace RedKanban.Backend.Controllers
         }
 
         [HttpGet("files")]
-        public async System.Threading.Tasks.Task<IActionResult> GetProjectFiles()
+        public ActionResult GetProjectFiles()
         {
             try
             {
-                var url = _clientProvider.RedmineUrl;
-                var apiKey = _clientProvider.ApiKey;
+                var manager = _clientProvider.GetManager();
                 var projectIdentifier = _clientProvider.ProjectIdentifier;
 
-                if (string.IsNullOrWhiteSpace(url) || string.IsNullOrWhiteSpace(apiKey) || string.IsNullOrWhiteSpace(projectIdentifier))
+                if (string.IsNullOrWhiteSpace(projectIdentifier))
                 {
-                    return BadRequest("A URL, a API Key ou o Identificador do projeto do Redmine não foi configurado.");
+                    return BadRequest("O identificador do projeto (X-Redmine-Project-Identifier) é obrigatório.");
                 }
 
-                bool isDocker = Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER") == "true";
-                if (isDocker && (url.Contains("localhost") || url.Contains("127.0.0.1")))
+                var parameters = new NameValueCollection
                 {
-                    url = System.Text.RegularExpressions.Regex.Replace(url, @"(localhost|127\.0\.0\.1)(:\d+)?", "redmine:3000");
-                }
-
-                var handler = new System.Net.Http.HttpClientHandler
-                {
-                    ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true
+                    { "project_id", projectIdentifier }
                 };
 
-                using var client = new System.Net.Http.HttpClient(handler);
-                client.DefaultRequestHeaders.Add("X-Redmine-API-Key", apiKey);
-
-                var targetUrl = $"{url.TrimEnd('/')}/projects/{projectIdentifier}/files.json";
-                var response = await client.GetAsync(targetUrl);
-
-                if (response.IsSuccessStatusCode)
+                var files = manager.GetObjects<Redmine.Net.Api.Types.File>(parameters);
+                if (files == null)
                 {
-                    var content = await response.Content.ReadAsStringAsync();
-                    return Content(content, "application/json");
+                    return Ok(new { files = new List<object>() });
                 }
 
-                var errorContent = await response.Content.ReadAsStringAsync();
-                return StatusCode((int)response.StatusCode, errorContent);
+                var filesDto = files.Select(f => new
+                {
+                    id = f.Id,
+                    filename = f.Filename,
+                    filesize = f.FileSize,
+                    created_on = f.CreatedOn,
+                    description = f.Description,
+                    downloads = f.Downloads,
+                    digest = f.Digest,
+                    content_url = f.ContentUrl,
+                    author = f.Author != null ? new { id = f.Author.Id, name = f.Author.Name } : null
+                }).ToList();
+
+                return Ok(new { files = filesDto });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, $"Erro ao buscar arquivos do projeto: {ex.Message}");
+                return BadRequest($"Erro ao buscar arquivos do projeto: {ex.Message}");
             }
         }
 
@@ -1291,7 +1290,7 @@ namespace RedKanban.Backend.Controllers
                 using var client = new System.Net.Http.HttpClient(handler);
                 client.DefaultRequestHeaders.Add("X-Redmine-API-Key", apiKey);
 
-                var targetUrl = $"{url.TrimEnd('/')}/projects/{projectIdentifier}/files.json";
+                var targetUrl = $"{url.TrimEnd('/')}/projects/{projectIdentifier}/files.json?key={apiKey}";
                 var payload = new
                 {
                     file = new
@@ -1323,46 +1322,17 @@ namespace RedKanban.Backend.Controllers
         }
 
         [HttpDelete("files/{id}")]
-        public async System.Threading.Tasks.Task<IActionResult> DeleteProjectFile(int id)
+        public IActionResult DeleteProjectFile(int id)
         {
             try
             {
-                var url = _clientProvider.RedmineUrl;
-                var apiKey = _clientProvider.ApiKey;
-
-                if (string.IsNullOrWhiteSpace(url) || string.IsNullOrWhiteSpace(apiKey))
-                {
-                    return BadRequest("A URL ou a API Key do Redmine não foi configurada.");
-                }
-
-                bool isDocker = Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER") == "true";
-                if (isDocker && (url.Contains("localhost") || url.Contains("127.0.0.1")))
-                {
-                    url = System.Text.RegularExpressions.Regex.Replace(url, @"(localhost|127\.0\.0\.1)(:\d+)?", "redmine:3000");
-                }
-
-                var handler = new System.Net.Http.HttpClientHandler
-                {
-                    ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true
-                };
-
-                using var client = new System.Net.Http.HttpClient(handler);
-                client.DefaultRequestHeaders.Add("X-Redmine-API-Key", apiKey);
-
-                var targetUrl = $"{url.TrimEnd('/')}/attachments/{id}.json";
-                var response = await client.DeleteAsync(targetUrl);
-
-                if (response.IsSuccessStatusCode)
-                {
-                    return NoContent();
-                }
-
-                var errorContent = await response.Content.ReadAsStringAsync();
-                return StatusCode((int)response.StatusCode, errorContent);
+                var manager = _clientProvider.GetManager();
+                manager.DeleteObject<Attachment>(id.ToString(), new NameValueCollection());
+                return NoContent();
             }
             catch (Exception ex)
             {
-                return StatusCode(500, $"Erro ao excluir arquivo: {ex.Message}");
+                return BadRequest($"Erro ao excluir arquivo: {ex.Message}");
             }
         }
 
